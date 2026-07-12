@@ -1,0 +1,61 @@
+name: Repo Vibecheck
+description: Verify that an AI-generated repository works and matches what was requested.
+author: iueowiqj213
+branding:
+  icon: check-circle
+  color: purple
+inputs:
+  path:
+    description: Repository path to scan, relative to the workflow workspace.
+    required: false
+    default: .
+  requirements:
+    description: Requirements file, resolved relative to the scanned repository.
+    required: false
+    default: ""
+  prompt:
+    description: Original prompt file, resolved relative to the scanned repository.
+    required: false
+    default: ""
+  fail-on:
+    description: Failure threshold (never, error, warning).
+    required: false
+    default: error
+  run-install:
+    description: Execute the detected package-manager install command.
+    required: false
+    default: "false"
+  run-scripts:
+    description: Execute finite build and test scripts.
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: ${{ github.action_path }}/package-lock.json
+    - name: Install Repo Vibecheck
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --ignore-scripts && npm run build
+    - name: Scan repository
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        TARGET_PATH: ${{ inputs.path }}
+        REQUIREMENTS_PATH: ${{ inputs.requirements }}
+        PROMPT_PATH: ${{ inputs.prompt }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        RUN_INSTALL: ${{ inputs.run-install }}
+        RUN_SCRIPTS: ${{ inputs.run-scripts }}
+      run: |
+        args=(scan "$TARGET_PATH" --fail-on "$FAIL_ON")
+        if [[ -n "$REQUIREMENTS_PATH" ]]; then args+=(--requirements "$REQUIREMENTS_PATH"); fi
+        if [[ -n "$PROMPT_PATH" ]]; then args+=(--prompt "$PROMPT_PATH"); fi
+        if [[ "$RUN_INSTALL" == "true" ]]; then args+=(--run-install); fi
+        if [[ "$RUN_SCRIPTS" == "true" ]]; then args+=(--run-scripts); fi
+        node "$ACTION_PATH/dist/cli.js" "${args[@]}"
