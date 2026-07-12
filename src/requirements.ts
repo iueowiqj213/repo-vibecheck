@@ -18,11 +18,16 @@ const RULES: Rule[] = [
 ];
 
 export function extractClaims(text: string): string[] {
-  return text.split(/\r?\n/).flatMap((rawLine) => {
+  const claims: string[] = [];
+  let current = "";
+  for (const rawLine of text.split(/\r?\n/)) {
     const isListItem = /^\s*(?:[-*+] |\d+[.)]\s*)/.test(rawLine);
-    const line = rawLine.replace(/^\s*(?:[-*+] |\d+[.)]\s*)/, "").replace(/^#+\s*/, "").trim();
-    return line.length >= 4 && (isListItem || RULES.some((rule) => rule.claim.test(line))) ? [line] : [];
-  });
+    let line = rawLine.replace(/^\s*(?:[-*+] |\d+[.)]\s*)/, "").replace(/^#+\s*/, "").trim();
+    if (isListItem && current) claims.push(current);
+    if (isListItem) current = line; else if (/^\s{2,}\S/.test(rawLine) && current) current += ` ${line}`; else if (line && RULES.some((rule) => rule.claim.test(line))) claims.push(line);
+  }
+  if (current) claims.push(current);
+  return claims.filter((line) => line.length >= 4);
 }
 
 export function extractReadmeClaims(text: string): string[] {
@@ -49,12 +54,14 @@ export function extractReadmeClaims(text: string): string[] {
 
 export function evaluateClaims(claims: string[], context: EvidenceContext): RequirementMatch[] {
   const matches: RequirementMatch[] = [];
-  for (const claim of claims) {
+  for (const [claimIndex, claim] of claims.entries()) {
+    const requirementId = claim.match(/^\[?([A-Z][A-Z0-9_-]*-\d+)\]?/i)?.[1];
     const matchingRules = RULES.filter((candidate) => candidate.claim.test(claim));
     if (matchingRules.length === 0) {
-      matches.push({ claim, concept: "unknown", status: "unverifiable", evidence: [], missingEvidence: ["No supported evidence rule"] });
+      matches.push({ claim, concept: "unknown", status: "unverifiable", evidence: [], missingEvidence: ["No supported evidence rule"], ...(requirementId ? { requirementId } : {}), sourceLine: claimIndex + 1 });
       continue;
     }
+    const negated = /\b(?:no|without|must not|do not|does not)\b/i.test(claim);
     for (const rule of matchingRules) {
     const evidence: string[] = [];
     const dependency = rule.dependency ? context.dependencies.find((item) => rule.dependency?.test(item)) : undefined;
@@ -66,8 +73,8 @@ export function evaluateClaims(claims: string[], context: EvidenceContext): Requ
     if (sourceFile) evidence.push(`source usage: ${sourceFile}`);
     const signals = { dependency: Boolean(dependency), file: Boolean(file), source: Boolean(sourceFile) };
     const missingEvidence = rule.required.filter(({ signal }) => !signals[signal]).map(({ label }) => label);
-    const status: RequirementStatus = evidence.length === 0 ? "missing" : missingEvidence.length === 0 ? "satisfied" : "partially_satisfied";
-      matches.push({ claim, concept: rule.concept, status, evidence, missingEvidence });
+    const status: RequirementStatus = negated ? (evidence.length === 0 ? "satisfied" : "missing") : evidence.length === 0 ? "missing" : missingEvidence.length === 0 ? "satisfied" : "partially_satisfied";
+      matches.push({ claim, concept: negated ? `${rule.concept}:forbidden` : rule.concept, status, evidence, missingEvidence: negated && evidence.length > 0 ? [`Forbidden ${rule.concept} evidence found`] : missingEvidence, ...(requirementId ? { requirementId } : {}), sourceLine: claimIndex + 1 });
     }
   }
   return matches;
@@ -91,13 +98,15 @@ export function normalizeMatches(matches: RequirementMatch[]): RequirementMatch[
   for (const group of groups.values()) {
     const claims = [...new Set(group.flatMap((match) => match.claims ?? [match.claim]))];
     const status = group.reduce((best, match) => rank[match.status] > rank[best] ? match.status : best, group[0]?.status ?? "missing");
+    const requirementId = group.find((match) => match.requirementId)?.requirementId;
     result.push({
       claim: claims[0] ?? "Unknown claim",
       claims,
       concept: group[0]?.concept ?? "unknown",
       status,
       evidence: [...new Set(group.flatMap((match) => match.evidence))],
-      missingEvidence: status === "satisfied" ? [] : [...new Set(group.flatMap((match) => match.missingEvidence))]
+      missingEvidence: status === "satisfied" ? [] : [...new Set(group.flatMap((match) => match.missingEvidence))],
+      ...(requirementId ? { requirementId } : {}), ...(group[0]?.sourceLine ? { sourceLine: group[0].sourceLine } : {})
     });
   }
   return result;
