@@ -3,12 +3,18 @@ import { renderHuman, renderJson } from "../src/reporters.js";
 import type { ScanReport } from "../src/types.js";
 
 const report: ScanReport = {
-  schemaVersion: "1.1",
+  schemaVersion: "2.0",
   product: "repo-vibecheck",
   targetPath: "/repo",
   generatedAt: "2026-07-11T00:00:00.000Z",
   score: 72,
-  categoryScores: { requirements: 30, baseline: 20, consistency: 14, hygiene: 8 },
+  scoreCoverage: 100,
+  categoryScores: {
+    requirements: { status: "scored", score: 30, maxScore: 50 },
+    baseline: { status: "scored", score: 20, maxScore: 25 },
+    consistency: { status: "scored", score: 14, maxScore: 15 },
+    hygiene: { status: "scored", score: 8, maxScore: 10 }
+  },
   project: { packageManager: "npm", lockfiles: ["package-lock.json"], projectTypes: ["Node.js"], scripts: ["build"] },
   checksExecuted: ["static"],
   requirementMatches: [],

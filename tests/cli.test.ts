@@ -13,6 +13,16 @@ describe("CLI", () => {
     expect(JSON.parse(output).product).toBe("repo-vibecheck");
   });
 
+  it("passes explicit project type overrides to the scanner", async () => {
+    const report = { product: "repo-vibecheck" } as ScanReport;
+    const scan = vi.fn(async () => report);
+    await createProgram(scan, () => {}).parseAsync([
+      "node", "repo-vibecheck", "scan", "fixture", "--json", "--project-type", "cli"
+    ]);
+
+    expect(scan).toHaveBeenCalledWith("fixture", expect.objectContaining({ projectType: "cli" }));
+  });
+
   it("sets the policy exit code without changing report output", async () => {
     const scan = vi.fn(async () => ({
       product: "repo-vibecheck", findings: [], summary: { error: 1, warning: 0, info: 0 }, requirementMatches: []

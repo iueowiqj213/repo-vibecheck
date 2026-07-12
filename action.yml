@@ -21,6 +21,22 @@ inputs:
     description: Failure threshold (never, error, warning).
     required: false
     default: error
+  offline:
+    description: Skip registry metadata lookups.
+    required: false
+    default: "true"
+  redact:
+    description: Redact secret-like evidence and home paths.
+    required: false
+    default: "true"
+  config:
+    description: Policy configuration file.
+    required: false
+    default: ""
+  baseline:
+    description: Baseline file for new-only gating.
+    required: false
+    default: ""
   run-install:
     description: Execute the detected package-manager install command.
     required: false
@@ -29,11 +45,15 @@ inputs:
     description: Execute finite build and test scripts.
     required: false
     default: "false"
+outputs:
+  sarif:
+    description: Path to the generated SARIF report.
+    value: ${{ steps.scan.outputs.sarif }}
 runs:
   using: composite
   steps:
     - name: Set up Node.js
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
       with:
         node-version: 24
         cache: npm
@@ -43,6 +63,7 @@ runs:
       working-directory: ${{ github.action_path }}
       run: npm ci --ignore-scripts && npm run build
     - name: Scan repository
+      id: scan
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
@@ -52,10 +73,20 @@ runs:
         FAIL_ON: ${{ inputs.fail-on }}
         RUN_INSTALL: ${{ inputs.run-install }}
         RUN_SCRIPTS: ${{ inputs.run-scripts }}
+        OFFLINE: ${{ inputs.offline }}
+        REDACT: ${{ inputs.redact }}
+        CONFIG_PATH: ${{ inputs.config }}
+        BASELINE_PATH: ${{ inputs.baseline }}
       run: |
-        args=(scan "$TARGET_PATH" --fail-on "$FAIL_ON")
+        sarif_path="$RUNNER_TEMP/repo-vibecheck.sarif"
+        args=(scan "$TARGET_PATH" --fail-on "$FAIL_ON" --format sarif --output "$sarif_path")
         if [[ -n "$REQUIREMENTS_PATH" ]]; then args+=(--requirements "$REQUIREMENTS_PATH"); fi
         if [[ -n "$PROMPT_PATH" ]]; then args+=(--prompt "$PROMPT_PATH"); fi
         if [[ "$RUN_INSTALL" == "true" ]]; then args+=(--run-install); fi
         if [[ "$RUN_SCRIPTS" == "true" ]]; then args+=(--run-scripts); fi
+        if [[ "$OFFLINE" == "true" ]]; then args+=(--offline); fi
+        if [[ "$REDACT" == "true" ]]; then args+=(--redact); fi
+        if [[ -n "$CONFIG_PATH" ]]; then args+=(--config "$CONFIG_PATH"); fi
+        if [[ -n "$BASELINE_PATH" ]]; then args+=(--baseline "$BASELINE_PATH"); fi
         node "$ACTION_PATH/dist/cli.js" "${args[@]}"
+        echo "sarif=$sarif_path" >> "$GITHUB_OUTPUT"
