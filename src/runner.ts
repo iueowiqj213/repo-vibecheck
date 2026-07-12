@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 
 type Manager = "npm" | "pnpm" | "yarn" | "bun" | "unknown";
 export interface CommandSpec { command: string; args: string[] }
@@ -13,12 +13,14 @@ export function commandsForProject(manager: Manager, scripts: Record<string, str
   return commands;
 }
 
-export async function runCommand(spec: CommandSpec, cwd: string, timeoutMs = 120_000): Promise<CommandResult> {
+export async function runCommand(spec: CommandSpec, cwd: string, timeoutMs = 120_000, passEnv: string[] = []): Promise<CommandResult> {
   const started = Date.now();
   return new Promise((resolve) => {
-    const child = spawn(spec.command, spec.args, { cwd, shell: process.platform === "win32", env: { ...process.env, CI: "true" } });
+    const env: NodeJS.ProcessEnv = { CI: "true" };
+    for (const key of ["PATH", "Path", "SystemRoot", "HOME", "USERPROFILE", "TEMP", "TMP", ...passEnv]) if (process.env[key] !== undefined) env[key] = process.env[key];
+    const child = spawn(spec.command, spec.args, { cwd, shell: process.platform === "win32", detached: process.platform !== "win32", env });
     let stdout = "", stderr = "", timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; killTree(child.pid); }, timeoutMs);
     child.stdout?.on("data", (data: Buffer) => { stdout = appendBounded(stdout, data.toString()); });
     child.stderr?.on("data", (data: Buffer) => { stderr = appendBounded(stderr, data.toString()); });
     child.on("error", (error) => { stderr = appendBounded(stderr, error.message); });
@@ -28,6 +30,8 @@ export async function runCommand(spec: CommandSpec, cwd: string, timeoutMs = 120
     });
   });
 }
+
+function killTree(pid: number | undefined): void { if (!pid) return; if (process.platform === "win32") spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" }); else try { process.kill(-pid, "SIGKILL"); } catch { /* process already exited */ } }
 
 function appendBounded(current: string, next: string): string {
   const combined = current + next;
