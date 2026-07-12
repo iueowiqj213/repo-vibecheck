@@ -19,11 +19,14 @@ export function detectProject(files: string[], manifest: PackageManifest): Proje
     findings.push({ id: "project.package-manager-mismatch", category: "project", severity: "error", message: `packageManager declares ${declared}, but lockfile indicates ${fromLock[0]}`, evidence: lockfiles });
   }
   const deps = { ...manifest.dependencies, ...manifest.devDependencies, ...manifest.peerDependencies };
-  const projectTypes = ["Node.js"];
+  const projectTypes: string[] = [];
+  if (files.includes("package.json") || Object.keys(deps).length > 0 || manifest.scripts) projectTypes.push("Node.js");
+  if (files.some((file) => file.endsWith(".py")) || files.includes("pyproject.toml") || files.includes("requirements.txt")) projectTypes.push("Python");
   if (files.includes("tsconfig.json") || deps.typescript) projectTypes.push("TypeScript");
   if (deps.next) projectTypes.push("Next.js");
   if (deps.vite || files.some((file) => /^vite\.config\./.test(file))) projectTypes.push("Vite");
   if (deps.react) projectTypes.push("React");
+  if (projectTypes.length === 0) projectTypes.push("Unknown");
   return { packageManager, lockfiles, projectTypes, scripts: Object.keys(manifest.scripts ?? {}), findings };
 }
 

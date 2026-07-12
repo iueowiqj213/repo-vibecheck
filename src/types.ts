@@ -9,6 +9,7 @@ export interface Finding {
   message: string;
   evidence: string[];
   remediation?: string;
+  baselineState?: "new" | "unchanged";
 }
 
 export interface RequirementMatch {
@@ -18,6 +19,9 @@ export interface RequirementMatch {
   status: RequirementStatus;
   evidence: string[];
   missingEvidence: string[];
+  baselineState?: "new" | "unchanged";
+  requirementId?: string;
+  sourceLine?: number;
 }
 
 export interface ProjectInfo {
@@ -25,20 +29,26 @@ export interface ProjectInfo {
   lockfiles: string[];
   projectTypes: string[];
   scripts: string[];
+  profile?: "app" | "library" | "cli" | "template";
 }
 
+export interface CategoryScore { status: "scored" | "not_run" | "not_applicable"; score: number | null; maxScore: number }
+
 export interface ScanReport {
-  schemaVersion: "1.1";
+  schemaVersion: "2.0";
   product: "repo-vibecheck";
   targetPath: string;
   generatedAt: string;
   score: number;
-  categoryScores: { requirements: number; baseline: number; consistency: number; hygiene: number };
+  scoreCoverage: number;
+  categoryScores: { requirements: CategoryScore; baseline: CategoryScore; consistency: CategoryScore; hygiene: CategoryScore };
   project: ProjectInfo;
   checksExecuted: string[];
   requirementMatches: RequirementMatch[];
   findings: Finding[];
   summary: Record<Severity, number>;
+  configPath?: string;
+  baseline?: { new: number; unchanged: number; resolved: number };
 }
 
 export interface PackageManifest {
@@ -50,4 +60,6 @@ export interface PackageManifest {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
+  bin?: unknown;
+  private?: boolean;
 }

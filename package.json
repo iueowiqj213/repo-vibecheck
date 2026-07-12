@@ -1,6 +1,6 @@
 {
   "name": "repo-vibecheck",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Verify that your AI-generated repo actually works and matches what was requested.",
   "type": "module",
   "bin": {
@@ -50,6 +50,18 @@
       "types": "./dist/policy.d.ts",
       "import": "./dist/policy.js"
     },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./baseline": {
+      "types": "./dist/baseline-report.d.ts",
+      "import": "./dist/baseline-report.js"
+    },
+    "./sarif": {
+      "types": "./dist/sarif.d.ts",
+      "import": "./dist/sarif.js"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
@@ -59,7 +71,8 @@
     "access": "public"
   },
   "dependencies": {
-    "commander": "^14.0.3"
+    "commander": "^14.0.3",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

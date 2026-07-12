@@ -5,6 +5,19 @@ import { describe, expect, it } from "vitest";
 import { scanRepository } from "../src/scan.js";
 
 describe("scanRepository", () => {
+  it("reports the discovered config path and lets an explicit project type override it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-profile-"));
+    await mkdir(join(root, "src"));
+    await writeFile(join(root, "package.json"), JSON.stringify({ private: true }));
+    await writeFile(join(root, "repo-vibecheck.yaml"), "projectType: library\noffline: true\n");
+    await writeFile(join(root, "src", "index.ts"), "export const value = 1;\n");
+
+    const report = await scanRepository(root, { online: false, projectType: "cli" });
+
+    expect(report.configPath).toBe(join(root, "repo-vibecheck.yaml"));
+    expect(report.project.profile).toBe("cli");
+  });
+
   it("composes project, requirement, env, script, and placeholder checks", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-"));
     await mkdir(join(root, "src"));
@@ -66,5 +79,13 @@ describe("scanRepository", () => {
     await writeFile(join(root, "tests", "env.test.ts"), "process.env.TEST_DATABASE_URL");
     const report = await scanRepository(root, { online: false });
     expect(report.findings.some((finding) => finding.id === "env.used-missing")).toBe(false);
+  });
+
+  it("does not apply package metadata checks without package.json", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-python-"));
+    await writeFile(join(root, "app.py"), "print('hello')");
+    const report = await scanRepository(root, { online: false });
+    expect(report.project.projectTypes).toContain("Python");
+    expect(report.findings.some((finding) => finding.id === "dependencies.missing-license")).toBe(false);
   });
 });

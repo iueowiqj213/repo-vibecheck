@@ -27,4 +27,9 @@ describe("detectProject", () => {
     const result = detectProject(["package.json", "vite.config.ts"], { peerDependencies: { react: "^19.0.0" } });
     expect(result.projectTypes).toEqual(expect.arrayContaining(["Vite", "React"]));
   });
+
+  it("detects Python without mislabeling it as Node.js", () => {
+    const result = detectProject(["app.py"], {});
+    expect(result.projectTypes).toEqual(["Python"]);
+  });
 });
