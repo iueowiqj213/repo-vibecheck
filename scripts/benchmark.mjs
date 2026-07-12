@@ -28,13 +28,14 @@ if (validateOnly) {
 const temporaryRoot = await mkdtemp(join(tmpdir(), "repo-vibecheck-benchmark-"));
 try {
   const targets = fixtureMode
-    ? [{ name: "fixture-vite-react", path: join(root, "benchmarks", "fixtures", "vite-react") }]
+    ? [{ name: "fixture-vite-react", path: join(root, "benchmarks", "fixtures", "vite-react"), expectedTypes: ["Node.js", "TypeScript", "Vite", "React"], allowedFindingIds: [] }]
     : await cloneCorpus(manifest.repositories, temporaryRoot);
-  const repositories = targets.map(({ name, path }) => scanTarget(name, path));
+  const repositories = targets.map((target) => scanTarget(target));
   const summary = { generatedAt: new Date().toISOString(), mode: fixtureMode ? "fixture" : "public", repositories };
   if (outputPath) await writeFile(resolve(outputPath), `${JSON.stringify(summary, null, 2)}\n`);
   if (jsonOutput) console.log(JSON.stringify(summary));
   else printSummary(summary);
+  if (repositories.some((repository) => repository.outcome !== "completed" || !repository.projectTypeAgreement)) process.exitCode = 1;
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
 }
@@ -59,16 +60,17 @@ async function cloneCorpus(repositories, destination) {
     execFileSync("git", ["clone", "--filter=blob:none", "--no-checkout", repository.url, path], { stdio: "ignore" });
     execFileSync("git", ["-C", path, "fetch", "--depth", "1", "origin", repository.commit], { stdio: "ignore" });
     execFileSync("git", ["-C", path, "checkout", "--detach", "FETCH_HEAD"], { stdio: "ignore" });
-    targets.push({ name: repository.name, path });
+    targets.push({ ...repository, path });
   }
   return targets;
 }
 
-function scanTarget(name, target) {
+function scanTarget(target) {
+  const { name, path, expectedTypes = [], allowedFindingIds = [] } = target;
   const started = Date.now();
   const builtCli = join(root, "dist", "cli.js");
   if (!existsSync(builtCli)) throw new Error("Built CLI not found. Run npm run build before benchmarking.");
-  const result = spawnSync(process.execPath, [builtCli, "scan", target, "--json", "--offline", "--fail-on", "never"], { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
+  const result = spawnSync(process.execPath, [builtCli, "scan", path, "--json", "--offline", "--fail-on", "never"], { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
   if (result.status !== 0 || !result.stdout) {
     return { name, durationMs: Date.now() - started, score: null, projectTypes: [], findings: null, requirementMatches: 0, outcome: "failed", exitCode: result.status, error: result.stderr.trim() };
   }
@@ -80,6 +82,8 @@ function scanTarget(name, target) {
     projectTypes: report.project.projectTypes,
     findings: report.summary,
     requirementMatches: report.requirementMatches.length,
+    projectTypeAgreement: expectedTypes.every((type) => report.project.projectTypes.includes(type)),
+    unexpectedFindingIds: [...new Set(report.findings.map((finding) => finding.id).filter((id) => allowedFindingIds.length > 0 && !allowedFindingIds.includes(id)))],
     outcome: "completed",
     exitCode: result.status
   };

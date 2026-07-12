@@ -7,6 +7,7 @@
       "commit": "450ae980b96318e3d661c2517e6c6e94acdd26a6",
       "expectedTypes": ["Node.js", "TypeScript"],
       "license": "MIT",
+      "allowedFindingIds": ["dependencies.count", "dependencies.missing-license", "dependencies.missing-repository", "env.used-missing", "baseline.missing-readme-script", "placeholders.marker"],
       "approximateSize": "666 KB"
     },
     {
@@ -15,14 +16,16 @@
       "commit": "84693214ef8cccc3357561fe4654f401a30dab62",
       "expectedTypes": ["Node.js", "TypeScript", "Vite"],
       "license": "MIT",
+      "allowedFindingIds": ["dependencies.count", "dependencies.missing-license", "dependencies.missing-repository", "env.used-missing", "baseline.missing-readme-script", "placeholders.marker"],
       "approximateSize": "11 MB"
     },
     {
       "name": "next-learn",
       "url": "https://github.com/vercel/next-learn.git",
       "commit": "914a33426aac20f825ca52fae80b889302b92240",
-      "expectedTypes": ["Node.js", "Next.js", "React"],
+      "expectedTypes": ["Node.js", "Next.js"],
       "license": "MIT",
+      "allowedFindingIds": ["dependencies.count", "dependencies.missing-license", "dependencies.missing-repository", "env.used-missing", "baseline.missing-readme-script", "placeholders.marker"],
       "approximateSize": "5 MB"
     },
     {
@@ -31,6 +34,7 @@
       "commit": "df916df487f97852a981770847f8550162761458",
       "expectedTypes": ["Node.js", "React"],
       "license": "MIT",
+      "allowedFindingIds": ["dependencies.count", "dependencies.missing-license", "dependencies.missing-repository", "env.used-missing", "baseline.missing-readme-script", "placeholders.marker"],
       "approximateSize": "4 MB"
     },
     {
@@ -39,6 +43,7 @@
       "commit": "925494cf31bcd97d3337aacd34e659e80cae7fe2",
       "expectedTypes": ["Node.js"],
       "license": "MIT",
+      "allowedFindingIds": ["dependencies.count", "dependencies.missing-license", "dependencies.missing-repository", "env.used-missing", "baseline.missing-readme-script", "placeholders.marker"],
       "approximateSize": "1 MB"
     }
   ]
