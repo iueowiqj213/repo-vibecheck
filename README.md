@@ -40,6 +40,34 @@ Scan the current directory:
 repo-vibecheck scan
 ```
 
+### Policy configuration
+
+```yaml
+# repo-vibecheck.yml
+projectType: library # auto | app | library | cli | template
+failOn: error
+offline: true
+redact: true
+ignore:
+  findings: [env.example-unused]
+requirements:
+  disable: [deployment]
+execution:
+  passEnv: []
+```
+
+CLI flags override configuration. Categories that are not applicable or not run are reported explicitly and excluded from the normalized score.
+
+### Baselines and SARIF
+
+```sh
+repo-vibecheck scan --write-baseline .repo-vibecheck-baseline.json
+repo-vibecheck scan --baseline .repo-vibecheck-baseline.json --fail-on error
+repo-vibecheck scan --format sarif --output repo-vibecheck.sarif --redact
+```
+
+With a baseline, CI policy considers only new findings. JSON schema 2.0 includes category status, score coverage, and baseline counts.
+
 Scan another repository and compare it with a requirements file:
 
 ```sh
