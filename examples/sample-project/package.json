@@ -1,0 +1,10 @@
+{
+  "name": "vibe-shop-sample",
+  "private": true,
+  "scripts": {
+    "build": "node -e \"console.log('sample build passed')\""
+  },
+  "dependencies": {
+    "stripe": "^18.0.0"
+  }
+}
