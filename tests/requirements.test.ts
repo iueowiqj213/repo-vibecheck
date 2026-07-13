@@ -63,6 +63,11 @@ describe("requirements matching", () => {
     expect(normalized).toHaveLength(2);
   });
 
+  it("recognizes conventional Python test filenames", () => {
+    const [match] = evaluateClaims(["Basic tests"], { files: ["test_app.py"], dependencies: [], sources: new Map() });
+    expect(match?.status).toBe("satisfied");
+  });
+
   it("extracts README product claims without treating command instructions as features", () => {
     const claims = extractReadmeClaims(`# Shop\n\nA storefront with Stripe checkout and email notifications.\n\n## Development\n\nRun npm test and npm run build.\n\n- Docker deployment`);
     expect(claims).toEqual([
