@@ -79,7 +79,7 @@ runs:
         BASELINE_PATH: ${{ inputs.baseline }}
       run: |
         sarif_path="$RUNNER_TEMP/repo-vibecheck.sarif"
-        args=(scan "$TARGET_PATH" --fail-on "$FAIL_ON" --format sarif --output "$sarif_path")
+        args=(scan "$TARGET_PATH" --fail-on "$FAIL_ON" --format sarif --output "$sarif_path" --github-summary)
         if [[ -n "$REQUIREMENTS_PATH" ]]; then args+=(--requirements "$REQUIREMENTS_PATH"); fi
         if [[ -n "$PROMPT_PATH" ]]; then args+=(--prompt "$PROMPT_PATH"); fi
         if [[ "$RUN_INSTALL" == "true" ]]; then args+=(--run-install); fi

@@ -14,7 +14,7 @@ import { scanRepository, type ScanOptions } from "./scan.js";
 import type { ScanReport } from "./types.js";
 
 type Scanner = (target: string, options: ScanOptions) => Promise<ScanReport>;
-interface CliOptions { json?: boolean; offline?: boolean; requirements?: string; prompt?: string; runInstall?: boolean; runScripts?: boolean; failOn?: FailLevel; config?: string; projectType?: "auto" | "app" | "library" | "cli" | "template"; baseline?: string; writeBaseline?: string; format?: "human" | "json" | "sarif"; output?: string; redact?: boolean; passEnv?: string[] }
+interface CliOptions { json?: boolean; offline?: boolean; requirements?: string; prompt?: string; runInstall?: boolean; runScripts?: boolean; failOn?: FailLevel; config?: string; projectType?: "auto" | "app" | "library" | "cli" | "template"; baseline?: string; writeBaseline?: string; format?: "human" | "json" | "sarif"; output?: string; redact?: boolean; passEnv?: string[]; githubSummary?: boolean }
 
 export function createProgram(scanner: Scanner = scanRepository, write: (value: string) => void = (value) => process.stdout.write(value)): Command {
   const program = new Command();
@@ -36,6 +36,7 @@ export function createProgram(scanner: Scanner = scanRepository, write: (value: 
     .option("--output <file>", "write report to a file")
     .option("--redact", "redact secret-like evidence and home paths")
     .option("--pass-env <names...>", "explicit host environment variable allowlist for --run-*")
+    .option("--github-summary", "append a Markdown report to GITHUB_STEP_SUMMARY")
     .option("--requirements <file>", "requirements or product specification file")
     .option("--prompt <file>", "original AI prompt file")
     .option("--run-install", "run the detected package manager install command")
@@ -60,7 +61,7 @@ export function createProgram(scanner: Scanner = scanRepository, write: (value: 
       const rendered = format === "sarif" ? renderSarif(report) : format === "json" ? renderJson(report) : renderHuman(report);
       if (flags.output) await atomicWrite(flags.output, `${rendered}\n`); else write(`${rendered}\n`);
       if (flags.writeBaseline) await atomicWrite(flags.writeBaseline, `${JSON.stringify(createBaseline(report.findings, report.requirementMatches), null, 2)}\n`);
-      if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `${renderSummary(report)}\n`);
+      if (flags.githubSummary && process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, `${renderSummary(report)}\n`);
       process.exitCode = exitCodeForReport(report, flags.failOn ?? loadedConfig.config.failOn, Boolean(flags.baseline));
     });
   return program;
