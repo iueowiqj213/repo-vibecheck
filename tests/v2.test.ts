@@ -37,6 +37,8 @@ describe("v0.2 policy integrations", () => {
     expect(redactText("TOKEN=secret C:\\Users\\alice\\repo")).not.toContain("secret");
     expect(redactText("TOKEN=secret C:\\Users\\alice\\repo")).toContain("<HOME>");
     expect(redactReport({ targetPath: "C:\\Users\\alice\\repo" })).toEqual({ targetPath: "<HOME>\\repo" });
+    expect(redactText("Basic tests")).toBe("Basic tests");
+    expect(redactText("Authorization: Basic dXNlcjpwYXNz")).toBe("Authorization: Basic <REDACTED>");
   });
 
   it("renders SARIF 2.1.0", () => {
