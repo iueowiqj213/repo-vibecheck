@@ -3,6 +3,8 @@ import type { RequirementMatch, RequirementStatus } from "./types.js";
 
 export interface EvidenceContext {
   files: string[];
+  implementationFiles?: string[];
+  testFiles?: string[];
   dependencies: string[];
   sources: ReadonlyMap<string, string>;
   implementationSources?: ReadonlyMap<string, string>;
@@ -195,7 +197,8 @@ export function evaluateClaims(claims: Array<string | ExtractedRequirement>, con
     for (const rule of matchingRules) {
     const evidence: string[] = [];
     const dependency = rule.dependency ? context.dependencies.find((item) => rule.dependency?.test(item)) : undefined;
-    const file = rule.file ? context.files.find((item) => rule.file?.test(item)) : undefined;
+    const files = rule.concept === "tests" ? context.testFiles ?? context.files : context.implementationFiles ?? context.files;
+    const file = rule.file ? files.find((item) => rule.file?.test(item)) : undefined;
     let sourceFile: string | undefined;
     if (rule.source) for (const [name, source] of context.sources) if (rule.source.test(source)) { sourceFile = name; break; }
     if (dependency) evidence.push(`dependency: ${dependency}`);
@@ -233,7 +236,7 @@ export function normalizeMatches(matches: RequirementMatch[]): RequirementMatch[
   const result: RequirementMatch[] = [];
   const groups = new Map<string, RequirementMatch[]>();
   for (const match of filtered) {
-    if (match.concept === "unknown") {
+    if (match.concept === "unknown" || match.requirementId) {
       result.push({ ...match, claims: match.claims ?? [match.claim] });
       continue;
     }

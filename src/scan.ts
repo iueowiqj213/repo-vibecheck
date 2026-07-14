@@ -8,12 +8,16 @@ import { checkEnvironment } from "./env.js";
 import { inventoryRepository } from "./inventory.js";
 import { findPlaceholders } from "./placeholders.js";
 import { detectProject } from "./project.js";
-import { evaluateClaims, extractClaims, extractReadmeClaims, normalizeMatches } from "./requirements.js";
+import { evaluateClaims, extractClaims, extractReadmeClaims, extractReadmeRequirements, normalizeMatches } from "./requirements.js";
 import { commandsForProject, runCommand } from "./runner.js";
 import { scoreReport } from "./score.js";
 import type { Finding, PackageManifest, ScanReport, Severity } from "./types.js";
 
 export interface ScanOptions { requirementsPath?: string; promptPath?: string; runInstall?: boolean; runScripts?: boolean; online?: boolean; configPath?: string; projectType?: ProjectProfile; baselinePath?: string; passEnv?: string[] }
+
+const SOURCE_FILE = /\.(?:[cm]?[jt]sx?|py)$/i;
+const TEST_SOURCE = /(?:^|\/)(?:__tests__|specs?|tests?)(?:\/|$)|(?:^|\/)(?:test_.*|.*(?:\.test|\.spec|_test))\.[^/]+$/i;
+const DOCUMENTATION = /(?:^|\/)(?:docs?|documentation|examples?|fixtures?)(?:\/|$)|\.(?:md|mdx|txt)$/i;
 
 export async function scanRepository(target: string, options: ScanOptions = {}): Promise<ScanReport> {
   const root = resolve(target);
@@ -25,18 +29,42 @@ export async function scanRepository(target: string, options: ScanOptions = {}):
   const configuredProfile = options.projectType ?? loadedConfig.config.projectType;
   const profile = configuredProfile === "auto" ? inferProfile(manifest, inventory.files) : configuredProfile;
   const readme = inventory.sources.get("README.md") ?? inventory.sources.get("readme.md") ?? "";
-  const implementationSources = new Map([...inventory.sources].filter(([file]) => /\.(?:[cm]?[jt]sx?|py)$/i.test(file) && !/(?:^|\/)(?:tests?|__tests__|examples?|fixtures?)(?:\/|$)/i.test(file)));
+  const sourceEntries = [...inventory.sources].filter(([file]) => SOURCE_FILE.test(file));
+  const implementationSources = new Map(sourceEntries.filter(([file]) => !TEST_SOURCE.test(file) && !DOCUMENTATION.test(file)));
+  const testSources = new Map(sourceEntries.filter(([file]) => TEST_SOURCE.test(file)));
   let findings: Finding[] = [...detected.findings, ...checkReadmeScripts(readme, manifest.scripts ?? {}), ...(inventory.files.includes("package.json") ? checkDependencies(manifest) : [])];
   const env = checkEnvironment(implementationSources, inventory.sources.get(".env.example") ?? "", readme);
   for (const variable of env.usedMissing) findings.push({ id: "env.used-missing", category: "env", severity: "error", message: `${variable} is used in code but missing from .env.example`, evidence: [variable] });
   for (const variable of env.exampleUnused) findings.push({ id: "env.example-unused", category: "env", severity: "warning", message: `${variable} exists in .env.example but is not used in code`, evidence: [variable] });
   for (const variable of env.readmeMissing) findings.push({ id: "env.readme-missing", category: "env", severity: "warning", message: `${variable} is mentioned in README but missing from .env.example`, evidence: [variable] });
   const requirementText = await loadOptional(root, options.requirementsPath ?? options.promptPath);
-  const claims = [...new Set([...extractClaims(requirementText), ...extractReadmeClaims(readme)])];
+  const readmeRequirements = extractReadmeRequirements(readme);
+  const explicitClaims = new Set(readmeRequirements.map((requirement) => withoutChecklistMarker(requirement.claim)));
+  const explicitRequirementIds = new Set(readmeRequirements.map((requirement) => requirement.requirementId));
   const dependencies = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies });
   findings.push(...findPlaceholders(implementationSources));
-  const evidenceFiles = inventory.files.filter((file) => !/\.(?:md|mdx|txt)$/i.test(file) && !/(?:^|\/)(?:requirements?|prompts?|specs?)(?:[./_-]|$)/i.test(file));
-  let requirementMatches = normalizeMatches(evaluateClaims(claims, { files: evidenceFiles, dependencies, sources: implementationSources })).filter((match) => !loadedConfig.config.requirements.disable.includes(match.concept));
+  const evidenceFiles = inventory.files.filter((file) => !DOCUMENTATION.test(file));
+  const testFiles = evidenceFiles.filter((file) => TEST_SOURCE.test(file));
+  const implementationFiles = evidenceFiles.filter((file) => !TEST_SOURCE.test(file));
+  const evidenceContext = { files: evidenceFiles, implementationFiles, testFiles, dependencies, sources: implementationSources, implementationSources, testSources };
+  const explicitMatches = evaluateClaims(readmeRequirements, evidenceContext);
+  const explicitConcepts = new Set(explicitMatches.map((match) => match.concept).filter((concept) => concept !== "unknown"));
+  const genericReadmeMatches = evaluateClaims(extractReadmeClaims(readme).filter((claim) => !explicitClaims.has(withoutChecklistMarker(claim)) && ![...explicitRequirementIds].some((id) => claim.includes(id))), evidenceContext)
+    .filter((match) => !explicitConcepts.has(match.concept));
+  let requirementMatches = [
+    ...normalizeMatches([...evaluateClaims(extractClaims(requirementText), evidenceContext), ...genericReadmeMatches]),
+    ...explicitMatches
+  ].filter((match) => match.concept === "unknown" || !loadedConfig.config.requirements.disable.includes(match.concept));
+  const unverifiableRequirements = requirementMatches.filter((match) => match.status === "unverifiable" && match.requirementId && explicitRequirementIds.has(match.requirementId));
+  if (unverifiableRequirements.length > 0) {
+    findings.push({
+      id: "requirements.unverifiable",
+      category: "requirements",
+      severity: "warning",
+      message: `${unverifiableRequirements.length} explicit requirement${unverifiableRequirements.length === 1 ? "" : "s"} could not be classified`,
+      evidence: unverifiableRequirements.map((match) => match.requirementId ?? "").sort()
+    });
+  }
   const hasPaymentEvidence = requirementMatches.some((match) => match.concept === "payment" && match.evidence.length > 0);
   const hasWebhookEvidence = [...implementationSources].some(([file, source]) => /webhook/i.test(file) || /webhooks\.constructEvent/i.test(source));
   if (hasPaymentEvidence && !hasWebhookEvidence) findings.push({ id: "claims.payment-webhook-missing", category: "claims", severity: "warning", message: "Payment evidence found, but no webhook handler evidence was detected", evidence: [], remediation: "Add and document a verified server-side payment webhook handler if the flow requires one." });
@@ -74,3 +102,4 @@ async function loadOptional(root: string, file: string | undefined): Promise<str
   return readFile(isAbsolute(file) ? file : resolve(root, file), "utf8");
 }
 function ignored(file: string, pattern: string): boolean { const normalized = pattern.replace(/\\/g, "/"); if (normalized.endsWith("/**")) return file.startsWith(normalized.slice(0, -3)); const regex = new RegExp(`^${normalized.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")}$`); return regex.test(file); }
+function withoutChecklistMarker(claim: string): string { return claim.replace(/^\[[ xX]\]\s*/, "").trim(); }

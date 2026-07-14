@@ -56,6 +56,18 @@ describe("requirements matching", () => {
     expect(normalized.find((match) => match.claim === "Docker deployment")?.concept).toBe("docker");
   });
 
+  it("keeps explicit requirements with the same recognized concept distinct", () => {
+    const normalized = normalizeMatches(evaluateClaims([
+      { claim: "REQ-AUTH-1: User authentication", requirementId: "REQ-AUTH-1", sourceLine: 3 },
+      { claim: "REQ-AUTH-2: User authentication", requirementId: "REQ-AUTH-2", sourceLine: 4 }
+    ], { files: ["src/auth.ts"], dependencies: [], sources: new Map([["src/auth.ts", "authenticate(user)"]]) }));
+
+    expect(normalized).toEqual([
+      expect.objectContaining({ requirementId: "REQ-AUTH-1", sourceLine: 3, concept: "authentication" }),
+      expect.objectContaining({ requirementId: "REQ-AUTH-2", sourceLine: 4, concept: "authentication" })
+    ]);
+  });
+
   it("keeps unknown claims separate", () => {
     const normalized = normalizeMatches([
       { claim: "Admin dashboard", concept: "unknown", status: "unverifiable", evidence: [], missingEvidence: [] },

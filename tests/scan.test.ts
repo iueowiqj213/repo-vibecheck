@@ -62,6 +62,114 @@ describe("scanRepository", () => {
     expect(report.requirementMatches.find((match) => match.concept === "authentication")?.status).toBe("missing");
   });
 
+  it("preserves scoped README requirements, separates test evidence, and warns for explicit unverifiable items", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-readme-requirements-"));
+    await Promise.all([mkdir(join(root, "src")), mkdir(join(root, "tests")), mkdir(join(root, "docs"))]);
+    await writeFile(join(root, "package.json"), "{}");
+    await writeFile(join(root, "README.md"), [
+      "# Task app",
+      "## Requirements",
+      "- REQ-AUTH-1: User authentication",
+      "- REQ-TASK-2: Save task record",
+      "- REQ-QUALITY-3: Improve quality",
+      "## Current Status",
+      "Partial: REQ-AUTH-1"
+    ].join("\n"));
+    await writeFile(join(root, "src", "auth.ts"), "export function authenticate(user: string) { return user; }");
+    await writeFile(join(root, "src", "tasks.ts"), "export function saveTaskRecord(task: string) { return task; }");
+    await writeFile(join(root, "tests", "tasks.test.ts"), "it(\"save task record\", () => {});");
+    await writeFile(join(root, "docs", "auth.ts"), "export function authenticateAdmin(user: string) { return user; }");
+
+    const report = await scanRepository(root, { online: false });
+
+    expect(report.requirementMatches.filter((match) => match.requirementId).map((match) => [match.requirementId, match.sourceLine])).toEqual([
+      ["REQ-AUTH-1", 3],
+      ["REQ-TASK-2", 4],
+      ["REQ-QUALITY-3", 5]
+    ]);
+    expect(report.requirementMatches.filter((match) => match.concept === "authentication")).toHaveLength(1);
+    expect(report.requirementMatches.find((match) => match.requirementId === "REQ-AUTH-1")).toMatchObject({
+      status: "partially_satisfied",
+      missingEvidence: expect.arrayContaining(["README declares requirement as partially_satisfied"])
+    });
+    expect(report.requirementMatches.find((match) => match.requirementId === "REQ-TASK-2")?.evidence).toContain("test: tests/tasks.test.ts:1");
+    expect(report.requirementMatches.find((match) => match.requirementId === "REQ-QUALITY-3")?.status).toBe("unverifiable");
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      id: "requirements.unverifiable",
+      category: "requirements",
+      severity: "warning",
+      evidence: ["REQ-QUALITY-3"]
+    }));
+  });
+
+  it("does not use TypeScript files under documentation as implementation evidence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-doc-source-"));
+    await mkdir(join(root, "docs"));
+    await writeFile(join(root, "package.json"), "{}");
+    await writeFile(join(root, "README.md"), "## Requirements\n- REQ-AUTH-1: User authentication");
+    await writeFile(join(root, "docs", "auth.ts"), "export function authenticate(user: string) { return user; }");
+
+    const report = await scanRepository(root, { online: false });
+
+    expect(report.requirementMatches.find((match) => match.requirementId === "REQ-AUTH-1")?.status).toBe("missing");
+  });
+
+  it("does not use example source files as implementation evidence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-example-source-"));
+    await mkdir(join(root, "examples"));
+    await writeFile(join(root, "package.json"), "{}");
+    await writeFile(join(root, "README.md"), "## Requirements\n- REQ-AUTH-1: User authentication");
+    await writeFile(join(root, "examples", "auth.ts"), "export function authenticate(user: string) { return user; }");
+
+    const report = await scanRepository(root, { online: false });
+
+    expect(report.requirementMatches.find((match) => match.requirementId === "REQ-AUTH-1")?.status).toBe("missing");
+  });
+
+  it("keeps production source files with documentation-like names in implementation evidence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-production-names-"));
+    await mkdir(join(root, "src"));
+    await writeFile(join(root, "package.json"), "{}");
+    await writeFile(join(root, "src", "docs.ts"), "process.env.DOCS_TOKEN;");
+    await writeFile(join(root, "src", "spec.ts"), "process.env.SPEC_TOKEN;");
+    await writeFile(join(root, "src", "requirements.ts"), "process.env.REQUIREMENTS_TOKEN;");
+
+    const report = await scanRepository(root, { online: false });
+
+    expect(report.findings.filter((finding) => finding.id === "env.used-missing").map((finding) => finding.evidence[0]).sort()).toEqual([
+      "DOCS_TOKEN",
+      "REQUIREMENTS_TOKEN",
+      "SPEC_TOKEN"
+    ]);
+  });
+
+  it("uses test files only for generic test requirements, not implementation file evidence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-test-file-evidence-"));
+    await mkdir(join(root, "tests"));
+    await writeFile(join(root, "package.json"), "{}");
+    await writeFile(join(root, "README.md"), "# App\n\nUser authentication\n\n- Tests");
+    await writeFile(join(root, "tests", "auth.test.ts"), "export function authenticate(user: string) { return user; }");
+
+    const report = await scanRepository(root, { online: false });
+
+    expect(report.requirementMatches.find((match) => match.concept === "authentication")?.status).toBe("missing");
+    expect(report.requirementMatches.find((match) => match.concept === "tests")?.status).toBe("satisfied");
+  });
+
+  it("gives explicit README requirements precedence over same-concept prose claims", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-readme-precedence-"));
+    await mkdir(join(root, "src"));
+    await writeFile(join(root, "package.json"), "{}");
+    await writeFile(join(root, "README.md"), "# App\n\nUser authentication\n\n## Requirements\n- [ ] REQ-AUTH-1: User authentication");
+    await writeFile(join(root, "src", "auth.ts"), "export function authenticate(user: string) { return user; }");
+
+    const report = await scanRepository(root, { online: false });
+
+    expect(report.requirementMatches.filter((match) => match.concept === "authentication")).toEqual([
+      expect.objectContaining({ requirementId: "REQ-AUTH-1" })
+    ]);
+  });
+
   it("does not report placeholders from tests or documentation", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-placeholder-scope-"));
     await mkdir(join(root, "tests"));
