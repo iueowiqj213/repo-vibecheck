@@ -146,4 +146,43 @@ describe("requirements matching", () => {
       { claim: "Persist changes", requirementId: "README-1", sourceLine: 3 }
     ]);
   });
+
+  it("attaches explicit negative status summaries by requirement number or ID without trusting Done", () => {
+    const requirements = extractReadmeRequirements([
+      "## Requirements",
+      "1. Provide account registration",
+      "2. REQ-ACCOUNT-2: Support user profiles",
+      "3. Keep an audit log",
+      "4. Validate configuration",
+      "5. Render reports",
+      "## Current Status",
+      "Done: 1, REQ-ACCOUNT-2",
+      "Partial / shallow: 3, REQ-ACCOUNT-2",
+      "Incomplete: 4",
+      "Missing depth: 5"
+    ].join("\n"));
+
+    expect(requirements).toEqual([
+      { claim: "Provide account registration", requirementId: "README-1", sourceLine: 2 },
+      { claim: "REQ-ACCOUNT-2: Support user profiles", requirementId: "REQ-ACCOUNT-2", sourceLine: 3, declaredDowngrade: "partially_satisfied" },
+      { claim: "Keep an audit log", requirementId: "README-2", sourceLine: 4, declaredDowngrade: "partially_satisfied" },
+      { claim: "Validate configuration", requirementId: "README-3", sourceLine: 5, declaredDowngrade: "partially_satisfied" },
+      { claim: "Render reports", requirementId: "README-4", sourceLine: 6, declaredDowngrade: "partially_satisfied" }
+    ]);
+  });
+
+  it("does not downgrade requirements from unrelated prose", () => {
+    const requirements = extractReadmeRequirements([
+      "## Requirements",
+      "1. Provide account registration",
+      "2. Keep an audit log",
+      "## Notes",
+      "The partial implementation mentioned in item 2 needs a follow-up."
+    ].join("\n"));
+
+    expect(requirements).toEqual([
+      { claim: "Provide account registration", requirementId: "README-1", sourceLine: 2 },
+      { claim: "Keep an audit log", requirementId: "README-2", sourceLine: 3 }
+    ]);
+  });
 });

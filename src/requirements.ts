@@ -19,6 +19,29 @@ const README_REQUIREMENT_HEADINGS = new Set([
   "feature requirements"
 ]);
 
+type DeclaredDowngrade = Extract<RequirementStatus, "partially_satisfied" | "missing">;
+
+const NEGATIVE_STATUS_DECLARATIONS: Array<{ pattern: RegExp; downgrade: DeclaredDowngrade }> = [
+  { pattern: /^\s*(?:partial(?:\s*\/\s*shallow)?|shallow|incomplete)\s*:\s*(.+?)\s*$/i, downgrade: "partially_satisfied" },
+  { pattern: /^\s*missing\s+depth\s*:\s*(.+?)\s*$/i, downgrade: "partially_satisfied" }
+];
+
+function normalizeRequirementReference(reference: string): string {
+  return reference.replace(/^\[(.+)\]$/, "$1").toUpperCase();
+}
+
+function parseNegativeStatusDeclaration(rawLine: string): { downgrade: DeclaredDowngrade; references: string[] } | undefined {
+  for (const declaration of NEGATIVE_STATUS_DECLARATIONS) {
+    const match = rawLine.match(declaration.pattern);
+    const referenceList = match?.[1];
+    if (!referenceList) continue;
+    const references = referenceList.split(",").map((reference) => normalizeRequirementReference(reference.trim()));
+    if (references.length > 0 && references.every((reference) => /^(?:\d+|[A-Z][A-Z0-9_-]*-\d+)$/.test(reference))) {
+      return { downgrade: declaration.downgrade, references };
+    }
+  }
+}
+
 const RULES: Rule[] = [
   { concept: "authentication", claim: /\b(auth(?:entication)?|login|session)\b/i, dependency: /auth|passport|clerk/i, file: /auth|login|middleware|session/i, source: /getServerSession|signIn|authenticate|session/i, required: [{ signal: "file", label: "implementation file" }, { signal: "source", label: "auth source usage" }] },
   { concept: "payment", claim: /\b(stripe|payment|checkout)\b/i, dependency: /stripe/i, file: /checkout|payment|stripe|webhook/i, source: /checkout\.sessions\.create|paymentIntents\.create|webhooks\.constructEvent/i, required: [{ signal: "dependency", label: "payment dependency" }, { signal: "source", label: "server-side payment call" }] },
@@ -67,6 +90,9 @@ export function extractReadmeClaims(text: string): string[] {
 
 export function extractReadmeRequirements(text: string): ExtractedRequirement[] {
   const requirements: ExtractedRequirement[] = [];
+  const requirementsById = new Map<string, ExtractedRequirement>();
+  const requirementIdsByReference = new Map<string, string>();
+  const declaredDowngrades: Array<{ downgrade: DeclaredDowngrade; references: string[] }> = [];
   let activeHeadingLevel: number | undefined;
   let fallbackId = 1;
   let inCodeBlock = false;
@@ -77,6 +103,9 @@ export function extractReadmeRequirements(text: string): ExtractedRequirement[] 
       continue;
     }
     if (inCodeBlock) continue;
+
+    const declaredDowngrade = parseNegativeStatusDeclaration(rawLine);
+    if (declaredDowngrade) declaredDowngrades.push(declaredDowngrade);
 
     const heading = rawLine.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
     if (heading) {
@@ -93,18 +122,33 @@ export function extractReadmeRequirements(text: string): ExtractedRequirement[] 
     }
 
     if (activeHeadingLevel === undefined) continue;
-    const item = rawLine.match(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(.+?)\s*$/);
+    const item = rawLine.match(/^\s*(?:(\d+)[.)]\s+|[-*+]\s+)(.+?)\s*$/);
     if (!item) continue;
 
-    const [, rawClaim] = item;
+    const requirementNumber = item[1];
+    const rawClaim = item[2];
     if (!rawClaim) continue;
     const claim = rawClaim.replace(/^\[[ xX]\]\s*/, "").trim();
     const explicitRequirementId = claim.match(/^\[?([A-Z][A-Z0-9_-]*-\d+)\]?/i)?.[1];
-    requirements.push({
+    const requirementId = explicitRequirementId ?? `README-${fallbackId++}`;
+    const requirement = {
       claim,
-      requirementId: explicitRequirementId ?? `README-${fallbackId++}`,
+      requirementId,
       sourceLine: index + 1
-    });
+    };
+    requirements.push(requirement);
+    requirementsById.set(requirementId, requirement);
+    requirementIdsByReference.set(normalizeRequirementReference(requirementId), requirementId);
+    if (requirementNumber) requirementIdsByReference.set(requirementNumber, requirementId);
+  }
+
+  for (const { downgrade, references } of declaredDowngrades) {
+    for (const reference of references) {
+      const requirementId = requirementIdsByReference.get(reference);
+      const requirement = requirementId ? requirementsById.get(requirementId) : undefined;
+      if (!requirement || requirement.declaredDowngrade === "missing") continue;
+      requirement.declaredDowngrade = downgrade === "missing" ? "missing" : requirement.declaredDowngrade ?? downgrade;
+    }
   }
 
   return requirements;
