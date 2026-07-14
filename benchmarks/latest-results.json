@@ -1,0 +1,92 @@
+{
+  "generatedAt": "2026-07-11T13:29:28.808Z",
+  "mode": "public",
+  "repositories": [
+    {
+      "name": "node-ts-api-template",
+      "durationMs": 183,
+      "score": 46,
+      "projectTypes": [
+        "Node.js",
+        "TypeScript"
+      ],
+      "findings": {
+        "error": 13,
+        "warning": 1,
+        "info": 1
+      },
+      "requirementMatches": 4,
+      "outcome": "completed",
+      "exitCode": 0
+    },
+    {
+      "name": "vite-plugin-react",
+      "durationMs": 3456,
+      "score": 2,
+      "projectTypes": [
+        "Node.js",
+        "TypeScript",
+        "Vite"
+      ],
+      "findings": {
+        "error": 15,
+        "warning": 5,
+        "info": 1
+      },
+      "requirementMatches": 0,
+      "outcome": "completed",
+      "exitCode": 0
+    },
+    {
+      "name": "next-learn",
+      "durationMs": 512,
+      "score": 64,
+      "projectTypes": [
+        "Node.js",
+        "Next.js"
+      ],
+      "findings": {
+        "error": 1,
+        "warning": 3,
+        "info": 1
+      },
+      "requirementMatches": 2,
+      "outcome": "completed",
+      "exitCode": 0
+    },
+    {
+      "name": "react-fundamentals",
+      "durationMs": 219,
+      "score": 16,
+      "projectTypes": [
+        "Node.js",
+        "TypeScript",
+        "React"
+      ],
+      "findings": {
+        "error": 1,
+        "warning": 2,
+        "info": 1
+      },
+      "requirementMatches": 1,
+      "outcome": "completed",
+      "exitCode": 0
+    },
+    {
+      "name": "clsx",
+      "durationMs": 115,
+      "score": 25,
+      "projectTypes": [
+        "Node.js"
+      ],
+      "findings": {
+        "error": 0,
+        "warning": 0,
+        "info": 1
+      },
+      "requirementMatches": 1,
+      "outcome": "completed",
+      "exitCode": 0
+    }
+  ]
+}

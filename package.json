@@ -1,0 +1,83 @@
+{
+  "name": "repo-vibecheck",
+  "version": "0.2.0",
+  "description": "Verify that your AI-generated repo actually works and matches what was requested.",
+  "type": "module",
+  "bin": {
+    "repo-vibecheck": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "dev": "tsx src/cli.ts",
+    "benchmark": "node scripts/benchmark.mjs",
+    "benchmark:fixture": "node scripts/benchmark.mjs --fixture",
+    "benchmark:validate": "node scripts/benchmark.mjs --validate",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "ai",
+    "cli",
+    "repository",
+    "verification",
+    "vibe-coding"
+  ],
+  "license": "MIT",
+  "author": "iueowiqj213",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iueowiqj213/repo-vibecheck.git"
+  },
+  "homepage": "https://github.com/iueowiqj213/repo-vibecheck#readme",
+  "bugs": {
+    "url": "https://github.com/iueowiqj213/repo-vibecheck/issues"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/scan.d.ts",
+      "import": "./dist/scan.js"
+    },
+    "./policy": {
+      "types": "./dist/policy.d.ts",
+      "import": "./dist/policy.js"
+    },
+    "./config": {
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./baseline": {
+      "types": "./dist/baseline-report.d.ts",
+      "import": "./dist/baseline-report.js"
+    },
+    "./sarif": {
+      "types": "./dist/sarif.d.ts",
+      "import": "./dist/sarif.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.4"
+  }
+}
