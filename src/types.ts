@@ -32,7 +32,7 @@ export interface ProjectInfo {
   profile?: "app" | "library" | "cli" | "template";
 }
 
-export interface CategoryScore { status: "scored" | "not_run" | "not_applicable"; score: number | null; maxScore: number }
+export interface CategoryScore { status: "scored" | "not_run" | "not_applicable"; score: number | null; maxScore: number; coverage?: number }
 
 export interface ScanReport {
   schemaVersion: "2.0";
