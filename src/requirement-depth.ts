@@ -23,12 +23,15 @@ const SYNONYMS: Readonly<Record<string, string>> = {
   complete: "complete",
   done: "complete",
   edit: "edit",
+  filtering: "filter",
   load: "save",
   modify: "edit",
   persist: "save",
   remove: "delete",
-  save: "save"
+  save: "save",
+  validation: "validate"
 };
+const ACTION_TOKENS = new Set(["add", "complete", "delete", "edit", "filter", "list", "prioritize", "save", "validate"]);
 const MAX_EVIDENCE = 3;
 const MAX_MISSING_REASONS = 3;
 const IMPLEMENTATION_ANCHOR = /\b(?:action|async|case|command|def|else|function|handler|if|match|switch|when)\b|=>/i;
@@ -118,8 +121,11 @@ function stripComments(source: string): string {
 function hasMatchingTokens(line: string, claimTokens: ReadonlySet<string>, kind: Signal["kind"]): boolean {
   const code = stripQuotedLiterals(line);
   const tokenSource = kind === "test" || COMMAND_BRANCH.test(code) ? line : code;
+  const sourceTokens = normalizeRequirementTokens(tokenSource);
+  const requiredActions = [...claimTokens].filter((token) => ACTION_TOKENS.has(token));
+  if (requiredActions.length > 0 && !sourceTokens.some((token) => requiredActions.includes(token))) return false;
   let matches = 0;
-  for (const token of normalizeRequirementTokens(tokenSource)) {
+  for (const token of sourceTokens) {
     if (!claimTokens.has(token)) continue;
     matches++;
     if (matches >= 2) return true;

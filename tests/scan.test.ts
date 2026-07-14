@@ -1,6 +1,7 @@
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { scanRepository } from "../src/scan.js";
 
@@ -195,5 +196,95 @@ describe("scanRepository", () => {
     const report = await scanRepository(root, { online: false });
     expect(report.project.projectTypes).toContain("Python");
     expect(report.findings.some((finding) => finding.id === "dependencies.missing-license")).toBe(false);
+  });
+
+  it("classifies a realistic half-built task app below a completed equivalent", async () => {
+    const fixtureRoot = fileURLToPath(new URL("./fixtures/realistic-half-built/", import.meta.url));
+    const report = await scanRepository(fixtureRoot, { online: false });
+    const expectedIds = [
+      "REQ-TASK-1",
+      "REQ-TASK-2",
+      "REQ-TASK-3",
+      "REQ-TASK-4",
+      "REQ-TASK-5",
+      "REQ-TASK-6",
+      "REQ-TASK-7",
+      "REQ-TASK-8",
+      "REQ-TASK-9",
+      "REQ-TASK-10"
+    ];
+    const requirements = new Map(report.requirementMatches.map((match) => [match.requirementId ?? "", match]));
+
+    expect([...requirements.keys()].filter((id) => id.startsWith("REQ-TASK-"))).toEqual(expectedIds);
+    for (const id of expectedIds.slice(0, 4)) expect(requirements.get(id)?.status).toBe("satisfied");
+    for (const id of expectedIds.slice(4, 8)) expect(requirements.get(id)?.status).toBe("partially_satisfied");
+    expect(requirements.get("REQ-TASK-9")?.status).toBe("missing");
+    expect(requirements.get("REQ-TASK-9")?.status).not.toBe("satisfied");
+    expect(requirements.get("REQ-TASK-10")?.status).toBe("satisfied");
+    expect(report.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "placeholders.marker",
+        evidence: expect.arrayContaining([expect.stringContaining("app.py:")])
+      })
+    ]));
+
+    const evidenceOnlyRoot = await mkdtemp(join(tmpdir(), "vibecheck-half-built-evidence-"));
+    const fixtureReadme = await readFile(join(fixtureRoot, "README.md"), "utf8");
+    await Promise.all([
+      writeFile(join(evidenceOnlyRoot, "README.md"), fixtureReadme.split("## Current Status")[0] ?? fixtureReadme),
+      writeFile(join(evidenceOnlyRoot, "app.py"), await readFile(join(fixtureRoot, "app.py"), "utf8")),
+      writeFile(join(evidenceOnlyRoot, "test_app.py"), await readFile(join(fixtureRoot, "test_app.py"), "utf8"))
+    ]);
+    const evidenceOnlyReport = await scanRepository(evidenceOnlyRoot, { online: false });
+    const evidenceOnlyRequirements = new Map(evidenceOnlyReport.requirementMatches.map((match) => [match.requirementId ?? "", match]));
+    for (const id of expectedIds.slice(4, 8)) expect(evidenceOnlyRequirements.get(id)?.status).toBe("partially_satisfied");
+    expect(evidenceOnlyRequirements.get("REQ-TASK-9")?.status).toBe("missing");
+
+    const completedRoot = await mkdtemp(join(tmpdir(), "vibecheck-complete-task-app-"));
+    await Promise.all([
+      writeFile(join(completedRoot, "README.md"), [
+        "# Task app",
+        "",
+        "## Requirements",
+        "1. REQ-TASK-1: Add task records",
+        "2. REQ-TASK-2: List task records",
+        "3. REQ-TASK-3: Mark task records done",
+        "4. REQ-TASK-4: Persist task records",
+        "5. REQ-TASK-5: Delete task records",
+        "6. REQ-TASK-6: Edit task records",
+        "7. REQ-TASK-7: Prioritize task records",
+        "8. REQ-TASK-8: Open task filtering",
+        "9. REQ-TASK-9: Robust input validation",
+        "10. REQ-TASK-10: Basic task tests"
+      ].join("\n")),
+      writeFile(join(completedRoot, "app.py"), [
+        "def add_task(task): return {'title': task, 'done': False}",
+        "def list_task_records(tasks): return list(tasks)",
+        "def mark_task_done(task): task['done'] = True; return task",
+        "def persist_task_records(tasks): return {'saved': list(tasks)}",
+        "def delete_task(tasks, task): return [item for item in tasks if item != task]",
+        "def edit_task(task, title): return {**task, 'title': title}",
+        "def prioritize_task(task, priority): return {**task, 'priority': priority}",
+        "def filter_open_tasks(tasks): return [item for item in tasks if not item['done']]",
+        "def input_validation(value):",
+        "    if not isinstance(value, str) or not value.strip(): raise ValueError('invalid input')",
+        "    return value.strip()"
+      ].join("\n")),
+      writeFile(join(completedRoot, "test_app.py"), [
+        "from app import *",
+        "def test_add_task(): assert add_task('x')['done'] is False",
+        "def test_list_task_records(): assert list_task_records([]) == []",
+        "def test_mark_task_done(): assert mark_task_done({'done': False})['done'] is True",
+        "def test_persist_task_records(): assert persist_task_records([]) == {'saved': []}",
+        "def test_delete_task(): assert delete_task(['x'], 'x') == []",
+        "def test_edit_task(): assert edit_task({'title': 'x'}, 'y')['title'] == 'y'",
+        "def test_prioritize_task(): assert prioritize_task({}, 'high')['priority'] == 'high'",
+        "def test_filter_open_tasks(): assert filter_open_tasks([{'done': True}]) == []",
+        "def test_input_validation(): assert input_validation(' x ') == 'x'"
+      ].join("\n"))
+    ]);
+
+    const completedReport = await scanRepository(completedRoot, { online: false });
+    expect(report.score).toBeLessThan(completedReport.score);
   });
 });
