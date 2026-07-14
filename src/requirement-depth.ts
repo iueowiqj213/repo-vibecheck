@@ -32,6 +32,7 @@ const SYNONYMS: Readonly<Record<string, string>> = {
   validation: "validate"
 };
 const ACTION_TOKENS = new Set(["add", "complete", "delete", "edit", "filter", "list", "prioritize", "save", "validate"]);
+const GENERIC_ACTION_TOKENS = new Set(["add"]);
 const MAX_EVIDENCE = 3;
 const MAX_MISSING_REASONS = 3;
 const IMPLEMENTATION_ANCHOR = /\b(?:action|async|case|command|def|else|function|handler|if|match|switch|when)\b|=>/i;
@@ -123,7 +124,9 @@ function hasMatchingTokens(line: string, claimTokens: ReadonlySet<string>, kind:
   const tokenSource = kind === "test" || COMMAND_BRANCH.test(code) ? line : code;
   const sourceTokens = normalizeRequirementTokens(tokenSource);
   const requiredActions = [...claimTokens].filter((token) => ACTION_TOKENS.has(token));
-  if (requiredActions.length > 0 && !sourceTokens.some((token) => requiredActions.includes(token))) return false;
+  const sourceActions = sourceTokens.filter((token) => ACTION_TOKENS.has(token));
+  if (requiredActions.length > 0 && sourceActions.length > 0 && !sourceActions.some((token) => requiredActions.includes(token))) return false;
+  if (requiredActions.some((token) => !GENERIC_ACTION_TOKENS.has(token)) && sourceActions.length === 0) return false;
   let matches = 0;
   for (const token of sourceTokens) {
     if (!claimTokens.has(token)) continue;

@@ -342,4 +342,34 @@ describe("requirements matching", () => {
       "source usage: src/checkout.ts"
     ]);
   });
+
+  it("does not let a requirement ID namespace trigger a generic rule", () => {
+    const [match] = evaluateClaims([
+      { claim: "REQ-API-1: Export CSV reports", requirementId: "REQ-API-1", sourceLine: 2 }
+    ], {
+      files: ["src/reports.ts", "tests/reports.test.ts"],
+      implementationFiles: ["src/reports.ts"],
+      testFiles: ["tests/reports.test.ts"],
+      dependencies: [],
+      sources: new Map([["src/reports.ts", "export function exportCsvReports() { return csv; }"]]),
+      implementationSources: new Map([["src/reports.ts", "export function exportCsvReports() { return csv; }"]]),
+      testSources: new Map([["tests/reports.test.ts", "it('exports CSV reports', () => {});"]])
+    });
+
+    expect(match).toMatchObject({ requirementId: "REQ-API-1", concept: "unknown", status: "satisfied" });
+  });
+
+  it("allows generic add requirements to use entity evidence without matching conflicting actions", () => {
+    const darkMode = evaluateRequirementDepth("Add dark mode", {
+      implementationSources: new Map([["src/theme.ts", "export function toggleDarkMode() {}"]]),
+      testSources: new Map([["tests/theme.test.ts", "it('toggles dark mode', () => {});"]])
+    });
+    const wrongAction = evaluateRequirementDepth("Add task records", {
+      implementationSources: new Map([["src/tasks.py", "def list_task_records(): return []"]]),
+      testSources: new Map([["test_tasks.py", "def test_list_task_records(): pass"]])
+    });
+
+    expect(darkMode.status).toBe("satisfied");
+    expect(wrongAction.status).toBe("missing");
+  });
 });

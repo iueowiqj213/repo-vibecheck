@@ -177,9 +177,10 @@ export function evaluateClaims(claims: Array<string | ExtractedRequirement>, con
   for (const [claimIndex, input] of claims.entries()) {
     const requirement = toRequirement(input, claimIndex);
     const { claim, requirementId, sourceLine, declaredDowngrade } = requirement;
-    const matchingRules = RULES.filter((candidate) => candidate.claim.test(claim));
+    const evaluatedClaim = stripLeadingRequirementId(claim);
+    const matchingRules = RULES.filter((candidate) => candidate.claim.test(evaluatedClaim));
     if (matchingRules.length === 0) {
-      const fallback = evaluateRequirementDepth(claim, {
+      const fallback = evaluateRequirementDepth(evaluatedClaim, {
         implementationSources: context.implementationSources ?? context.sources,
         ...(context.testSources ? { testSources: context.testSources } : {})
       });
@@ -194,7 +195,7 @@ export function evaluateClaims(claims: Array<string | ExtractedRequirement>, con
       }, declaredDowngrade));
       continue;
     }
-    const negated = /\b(?:no|without|must not|do not|does not)\b/i.test(claim);
+    const negated = /\b(?:no|without|must not|do not|does not)\b/i.test(evaluatedClaim);
     for (const rule of matchingRules) {
     const evidence: string[] = [];
     const dependency = rule.dependency ? context.dependencies.find((item) => rule.dependency?.test(item)) : undefined;
@@ -212,6 +213,10 @@ export function evaluateClaims(claims: Array<string | ExtractedRequirement>, con
     }
   }
   return matches;
+}
+
+function stripLeadingRequirementId(claim: string): string {
+  return claim.replace(/^\s*\[?[A-Z][A-Z0-9_-]*-\d+\]?\s*:?\s*/i, "");
 }
 
 function toRequirement(input: string | ExtractedRequirement, claimIndex: number): EvaluatedRequirement {
