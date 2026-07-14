@@ -5,6 +5,19 @@ export interface EvidenceContext { files: string[]; dependencies: string[]; sour
 type Concept = "authentication" | "payment" | "database" | "email" | "docker" | "tests" | "api" | "deployment";
 type EvidenceSignal = "dependency" | "file" | "source";
 interface Rule { concept: Concept; claim: RegExp; dependency?: RegExp; file?: RegExp; source?: RegExp; required: Array<{ signal: EvidenceSignal; label: string }> }
+interface ExtractedRequirement {
+  claim: string;
+  requirementId: string;
+  sourceLine: number;
+  declaredDowngrade?: Extract<RequirementStatus, "partially_satisfied" | "missing">;
+}
+
+const README_REQUIREMENT_HEADINGS = new Set([
+  "requirements",
+  "requirement checklist",
+  "acceptance criteria",
+  "feature requirements"
+]);
 
 const RULES: Rule[] = [
   { concept: "authentication", claim: /\b(auth(?:entication)?|login|session)\b/i, dependency: /auth|passport|clerk/i, file: /auth|login|middleware|session/i, source: /getServerSession|signIn|authenticate|session/i, required: [{ signal: "file", label: "implementation file" }, { signal: "source", label: "auth source usage" }] },
@@ -50,6 +63,51 @@ export function extractReadmeClaims(text: string): string[] {
     if ((isHeading || isListItem) && recognized && !isCommandInstruction) claims.push(line);
   }
   return claims;
+}
+
+export function extractReadmeRequirements(text: string): ExtractedRequirement[] {
+  const requirements: ExtractedRequirement[] = [];
+  let activeHeadingLevel: number | undefined;
+  let fallbackId = 1;
+  let inCodeBlock = false;
+
+  for (const [index, rawLine] of text.split(/\r?\n/).entries()) {
+    if (/^\s*(?:`{3,}|~{3,})/.test(rawLine)) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) continue;
+
+    const heading = rawLine.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
+    if (heading) {
+      const [, headingMarks, rawHeadingTitle] = heading;
+      if (!headingMarks || !rawHeadingTitle) continue;
+      const headingLevel = headingMarks.length;
+      const headingTitle = rawHeadingTitle.replace(/\s+#+\s*$/, "").trim().toLowerCase();
+      if (README_REQUIREMENT_HEADINGS.has(headingTitle)) {
+        activeHeadingLevel = headingLevel;
+      } else if (activeHeadingLevel !== undefined && headingLevel <= activeHeadingLevel) {
+        activeHeadingLevel = undefined;
+      }
+      continue;
+    }
+
+    if (activeHeadingLevel === undefined) continue;
+    const item = rawLine.match(/^\s*(?:[-*+]\s+|\d+[.)]\s+)(.+?)\s*$/);
+    if (!item) continue;
+
+    const [, rawClaim] = item;
+    if (!rawClaim) continue;
+    const claim = rawClaim.replace(/^\[[ xX]\]\s*/, "").trim();
+    const explicitRequirementId = claim.match(/^\[?([A-Z][A-Z0-9_-]*-\d+)\]?/i)?.[1];
+    requirements.push({
+      claim,
+      requirementId: explicitRequirementId ?? `README-${fallbackId++}`,
+      sourceLine: index + 1
+    });
+  }
+
+  return requirements;
 }
 
 export function evaluateClaims(claims: string[], context: EvidenceContext): RequirementMatch[] {

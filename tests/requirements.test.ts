@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateClaims, extractClaims, extractReadmeClaims, normalizeMatches } from "../src/requirements.js";
+import { evaluateClaims, extractClaims, extractReadmeClaims, extractReadmeRequirements, normalizeMatches } from "../src/requirements.js";
 
 describe("requirements matching", () => {
   it("classifies satisfied, partial, missing, and unverifiable claims", () => {
@@ -73,6 +73,77 @@ describe("requirements matching", () => {
     expect(claims).toEqual([
       "A storefront with Stripe checkout and email notifications.",
       "Docker deployment"
+    ]);
+  });
+
+  it("extracts numbered and bulleted items only under accepted requirement headings", () => {
+    const requirements = extractReadmeRequirements([
+      "- Ordinary list item",
+      "## Requirements",
+      "1. REQ-12: Support exports",
+      "## requirement checklist",
+      "- Retain audit history",
+      "## Acceptance Criteria",
+      "1) Validate API input",
+      "## Feature Requirements",
+      "* Offer account deletion"
+    ].join("\n"));
+
+    expect(requirements).toEqual([
+      { claim: "REQ-12: Support exports", requirementId: "REQ-12", sourceLine: 3 },
+      { claim: "Retain audit history", requirementId: "README-1", sourceLine: 5 },
+      { claim: "Validate API input", requirementId: "README-2", sourceLine: 7 },
+      { claim: "Offer account deletion", requirementId: "README-3", sourceLine: 9 }
+    ]);
+  });
+
+  it("stops extraction at equal or higher headings", () => {
+    const requirements = extractReadmeRequirements([
+      "### Requirements",
+      "- Keep nested headings in scope",
+      "#### Detail",
+      "- Preserve this item",
+      "### Current Status",
+      "- Ignore this equal-depth item",
+      "## Requirements",
+      "- Start a new scoped section",
+      "# Honest Gaps",
+      "- Ignore this higher-level item"
+    ].join("\n"));
+
+    expect(requirements).toEqual([
+      { claim: "Keep nested headings in scope", requirementId: "README-1", sourceLine: 2 },
+      { claim: "Preserve this item", requirementId: "README-2", sourceLine: 4 },
+      { claim: "Start a new scoped section", requirementId: "README-3", sourceLine: 8 }
+    ]);
+  });
+
+  it("ignores examples, status, gaps, and other ordinary README lists", () => {
+    const requirements = extractReadmeRequirements([
+      "- Arbitrary README list",
+      "## Examples",
+      "1. Example item",
+      "## Current Status",
+      "- Status item",
+      "## Honest Gaps",
+      "* Gap item",
+      "## Product Requirements",
+      "- Unaccepted heading item"
+    ].join("\n"));
+
+    expect(requirements).toEqual([]);
+  });
+
+  it("normalizes GitHub checklist markers before assigning IDs", () => {
+    const requirements = extractReadmeRequirements([
+      "## Requirement Checklist",
+      "- [ ] REQ-9: Validate input",
+      "- [x] Persist changes"
+    ].join("\n"));
+
+    expect(requirements).toEqual([
+      { claim: "REQ-9: Validate input", requirementId: "REQ-9", sourceLine: 2 },
+      { claim: "Persist changes", requirementId: "README-1", sourceLine: 3 }
     ]);
   });
 });
