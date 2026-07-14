@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { evaluateRequirementDepth, normalizeRequirementTokens } from "../src/requirement-depth.js";
 import { evaluateClaims, extractClaims, extractReadmeClaims, extractReadmeRequirements, normalizeMatches } from "../src/requirements.js";
 
 describe("requirements matching", () => {
@@ -21,7 +22,7 @@ describe("requirements matching", () => {
     expect(matches.find((match) => match.concept === "authentication")?.status).toBe("satisfied");
     expect(matches.find((match) => match.concept === "payment")?.status).toBe("satisfied");
     expect(matches.find((match) => match.concept === "email")?.status).toBe("missing");
-    expect(matches.find((match) => match.concept === "unknown")?.status).toBe("unverifiable");
+    expect(matches.find((match) => match.concept === "unknown")?.status).toBe("missing");
   });
 
   it("does not treat a Stripe dependency alone as complete", () => {
@@ -183,6 +184,150 @@ describe("requirements matching", () => {
     expect(requirements).toEqual([
       { claim: "Provide account registration", requirementId: "README-1", sourceLine: 2 },
       { claim: "Keep an audit log", requirementId: "README-2", sourceLine: 3 }
+    ]);
+  });
+
+  it("normalizes identifiers, punctuation, stop words, and common requirement synonyms", () => {
+    expect(normalizeRequirementTokens("The task_manager should remove-item, modifyStatus, and persist/load when done.")).toEqual([
+      "task", "manager", "delete", "item", "edit", "status", "save", "complete"
+    ]);
+  });
+
+  it("classifies generic fallback requirements from implementation and depth evidence", () => {
+    const satisfied = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([["src/tasks.ts", "export function deleteTaskRecords() { return removeTask(); }"]]),
+      testSources: new Map([["tests/tasks.test.ts", "it('delete task records', () => {});"]])
+    });
+    const partial = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([["src/tasks.ts", "export function deleteTaskRecords() { return removeTask(); }"]])
+    });
+    const missing = evaluateRequirementDepth("Delete task records", { implementationSources: new Map() });
+    const unverifiable = evaluateRequirementDepth("Improve overall quality", { implementationSources: new Map() });
+
+    expect(satisfied.status).toBe("satisfied");
+    expect(partial.status).toBe("partially_satisfied");
+    expect(missing.status).toBe("missing");
+    expect(unverifiable.status).toBe("unverifiable");
+  });
+
+  it("excludes documentation, generated files, dependencies, comments, and test filenames as fallback proof", () => {
+    const [match] = evaluateClaims(["Delete task records"], {
+      files: ["README.md", "src/generated/tasks.ts", "tests/delete-task-records.test.ts"],
+      dependencies: ["delete-task-records"],
+      sources: new Map([
+        ["README.md", "export function deleteTaskRecords() {}"],
+        ["src/generated/tasks.ts", "export function deleteTaskRecords() {}"],
+        ["src/tasks.ts", "// export function deleteTaskRecords() {}"]
+      ]),
+      testSources: new Map([["tests/delete-task-records.test.ts", ""]])
+    });
+
+    expect(match).toMatchObject({ concept: "unknown", status: "missing", evidence: [] });
+    expect(match?.missingEvidence).toContain("matching implementation function or command branch");
+  });
+
+  it("keeps fallback evidence bounded and stable regardless of source iteration order", () => {
+    const sources = [
+      ["src/z.ts", "export function deleteTaskRecords() {}"],
+      ["src/a.ts", "export function deleteTaskRecords() {}"],
+      ["src/c.ts", "if (command === 'delete-task-records') {}"],
+      ["src/b.ts", "def delete_task_records(): pass"]
+    ] as const;
+    const forward = evaluateRequirementDepth("Delete task records", { implementationSources: new Map(sources) });
+    const reversed = evaluateRequirementDepth("Delete task records", { implementationSources: new Map([...sources].reverse()) });
+
+    expect(forward.status).toBe("satisfied");
+    expect(forward.evidence).toEqual([
+      "implementation: src/a.ts:1",
+      "implementation: src/b.ts:1",
+      "implementation: src/c.ts:1"
+    ]);
+    expect(forward.evidence).toHaveLength(3);
+    expect(forward.evidence).toEqual(reversed.evidence);
+    expect(forward.missingEvidence).toEqual(reversed.missingEvidence);
+  });
+
+  it("preserves requirement metadata and only applies declared downgrades after fallback evidence", () => {
+    const requirements = extractReadmeRequirements([
+      "## Requirements",
+      "1. Add task records",
+      "2. Open archived task view",
+      "## Current Status",
+      "Partial: 1, 2"
+    ].join("\n"));
+    const matches = normalizeMatches(evaluateClaims(requirements, {
+      files: ["src/tasks.ts"],
+      dependencies: [],
+      sources: new Map([["src/tasks.ts", "export function addTaskRecords() {}"]]),
+      testSources: new Map([["tests/tasks.test.ts", "it('add task records', () => {});"]])
+    }));
+
+    expect(matches).toEqual(expect.arrayContaining([
+      expect.objectContaining({ requirementId: "README-1", sourceLine: 2, concept: "unknown", status: "partially_satisfied" }),
+      expect.objectContaining({ requirementId: "README-2", sourceLine: 3, concept: "unknown", status: "missing" })
+    ]));
+  });
+
+  it("treats explicit Not implemented declarations as missing-only downgrades", () => {
+    const requirements = extractReadmeRequirements([
+      "## Requirements",
+      "1. Add task records",
+      "## Current Status",
+      "Not implemented: 1"
+    ].join("\n"));
+    const [match] = evaluateClaims(requirements, {
+      files: ["src/tasks.ts"],
+      dependencies: [],
+      sources: new Map([["src/tasks.ts", "export function addTaskRecords() {}"]]),
+      testSources: new Map([["tests/tasks.test.ts", "it('add task records', () => {});"]])
+    });
+
+    expect(requirements).toEqual([
+      { claim: "Add task records", requirementId: "README-1", sourceLine: 2, declaredDowngrade: "missing" }
+    ]);
+    expect(match).toMatchObject({ status: "missing", requirementId: "README-1" });
+  });
+
+  it("requires implementation and test anchors outside quoted literals", () => {
+    const literalOnly = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([["src/messages.ts", "const hint = 'function deleteTaskRecords';"]])
+    });
+    const quotedTestAnchor = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([["src/tasks.ts", "export function deleteTaskRecords() {}"]]),
+      testSources: new Map([["tests/tasks.test.ts", "const label = 'it delete task records';"]])
+    });
+    const commandBranch = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([["src/commands.ts", "if (command === 'delete_task_records') {}"]])
+    });
+
+    expect(literalOnly.status).toBe("missing");
+    expect(quotedTestAnchor.status).toBe("partially_satisfied");
+    expect(commandBranch).toMatchObject({ status: "partially_satisfied", evidence: ["implementation: src/commands.ts:1"] });
+  });
+
+  it("ignores Python inline comments and feature words in non-command literals", () => {
+    const match = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([
+        ["src/tasks.py", "def unrelated(): pass # delete task records"],
+        ["src/tasks.ts", "if (message) console.log('delete task records')"]
+      ])
+    });
+
+    expect(match).toMatchObject({ status: "missing", evidence: [] });
+  });
+
+  it("leaves recognized generic rules authoritative", () => {
+    const [match] = evaluateClaims(["Stripe checkout"], {
+      files: ["src/checkout.ts"],
+      dependencies: ["stripe"],
+      sources: new Map([["src/checkout.ts", "stripe.checkout.sessions.create({})"]])
+    });
+
+    expect(match).toMatchObject({ concept: "payment", status: "satisfied" });
+    expect(match?.evidence).toEqual([
+      "dependency: stripe",
+      "file: src/checkout.ts",
+      "source usage: src/checkout.ts"
     ]);
   });
 });

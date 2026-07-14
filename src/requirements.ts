@@ -1,6 +1,13 @@
+import { evaluateRequirementDepth } from "./requirement-depth.js";
 import type { RequirementMatch, RequirementStatus } from "./types.js";
 
-export interface EvidenceContext { files: string[]; dependencies: string[]; sources: Map<string, string> }
+export interface EvidenceContext {
+  files: string[];
+  dependencies: string[];
+  sources: ReadonlyMap<string, string>;
+  implementationSources?: ReadonlyMap<string, string>;
+  testSources?: ReadonlyMap<string, string>;
+}
 
 type Concept = "authentication" | "payment" | "database" | "email" | "docker" | "tests" | "api" | "deployment";
 type EvidenceSignal = "dependency" | "file" | "source";
@@ -8,6 +15,13 @@ interface Rule { concept: Concept; claim: RegExp; dependency?: RegExp; file?: Re
 interface ExtractedRequirement {
   claim: string;
   requirementId: string;
+  sourceLine: number;
+  declaredDowngrade?: Extract<RequirementStatus, "partially_satisfied" | "missing">;
+}
+
+interface EvaluatedRequirement {
+  claim: string;
+  requirementId?: string;
   sourceLine: number;
   declaredDowngrade?: Extract<RequirementStatus, "partially_satisfied" | "missing">;
 }
@@ -23,7 +37,8 @@ type DeclaredDowngrade = Extract<RequirementStatus, "partially_satisfied" | "mis
 
 const NEGATIVE_STATUS_DECLARATIONS: Array<{ pattern: RegExp; downgrade: DeclaredDowngrade }> = [
   { pattern: /^\s*(?:partial(?:\s*\/\s*shallow)?|shallow|incomplete)\s*:\s*(.+?)\s*$/i, downgrade: "partially_satisfied" },
-  { pattern: /^\s*missing\s+depth\s*:\s*(.+?)\s*$/i, downgrade: "partially_satisfied" }
+  { pattern: /^\s*missing\s+depth\s*:\s*(.+?)\s*$/i, downgrade: "partially_satisfied" },
+  { pattern: /^\s*not\s+implemented\s*:\s*(.+?)\s*$/i, downgrade: "missing" }
 ];
 
 function normalizeRequirementReference(reference: string): string {
@@ -154,13 +169,26 @@ export function extractReadmeRequirements(text: string): ExtractedRequirement[] 
   return requirements;
 }
 
-export function evaluateClaims(claims: string[], context: EvidenceContext): RequirementMatch[] {
+export function evaluateClaims(claims: Array<string | ExtractedRequirement>, context: EvidenceContext): RequirementMatch[] {
   const matches: RequirementMatch[] = [];
-  for (const [claimIndex, claim] of claims.entries()) {
-    const requirementId = claim.match(/^\[?([A-Z][A-Z0-9_-]*-\d+)\]?/i)?.[1];
+  for (const [claimIndex, input] of claims.entries()) {
+    const requirement = toRequirement(input, claimIndex);
+    const { claim, requirementId, sourceLine, declaredDowngrade } = requirement;
     const matchingRules = RULES.filter((candidate) => candidate.claim.test(claim));
     if (matchingRules.length === 0) {
-      matches.push({ claim, concept: "unknown", status: "unverifiable", evidence: [], missingEvidence: ["No supported evidence rule"], ...(requirementId ? { requirementId } : {}), sourceLine: claimIndex + 1 });
+      const fallback = evaluateRequirementDepth(claim, {
+        implementationSources: context.implementationSources ?? context.sources,
+        ...(context.testSources ? { testSources: context.testSources } : {})
+      });
+      matches.push(applyDeclaredDowngrade({
+        claim,
+        concept: "unknown",
+        status: fallback.status,
+        evidence: fallback.evidence,
+        missingEvidence: fallback.missingEvidence,
+        ...(requirementId ? { requirementId } : {}),
+        sourceLine
+      }, declaredDowngrade));
       continue;
     }
     const negated = /\b(?:no|without|must not|do not|does not)\b/i.test(claim);
@@ -176,10 +204,27 @@ export function evaluateClaims(claims: string[], context: EvidenceContext): Requ
     const signals = { dependency: Boolean(dependency), file: Boolean(file), source: Boolean(sourceFile) };
     const missingEvidence = rule.required.filter(({ signal }) => !signals[signal]).map(({ label }) => label);
     const status: RequirementStatus = negated ? (evidence.length === 0 ? "satisfied" : "missing") : evidence.length === 0 ? "missing" : missingEvidence.length === 0 ? "satisfied" : "partially_satisfied";
-      matches.push({ claim, concept: negated ? `${rule.concept}:forbidden` : rule.concept, status, evidence, missingEvidence: negated && evidence.length > 0 ? [`Forbidden ${rule.concept} evidence found`] : missingEvidence, ...(requirementId ? { requirementId } : {}), sourceLine: claimIndex + 1 });
+      matches.push(applyDeclaredDowngrade({ claim, concept: negated ? `${rule.concept}:forbidden` : rule.concept, status, evidence, missingEvidence: negated && evidence.length > 0 ? [`Forbidden ${rule.concept} evidence found`] : missingEvidence, ...(requirementId ? { requirementId } : {}), sourceLine }, declaredDowngrade));
     }
   }
   return matches;
+}
+
+function toRequirement(input: string | ExtractedRequirement, claimIndex: number): EvaluatedRequirement {
+  if (typeof input !== "string") return input;
+  const requirementId = input.match(/^\[?([A-Z][A-Z0-9_-]*-\d+)\]?/i)?.[1];
+  return { claim: input, ...(requirementId ? { requirementId } : {}), sourceLine: claimIndex + 1 };
+}
+
+function applyDeclaredDowngrade(match: RequirementMatch, downgrade: DeclaredDowngrade | undefined): RequirementMatch {
+  if (!downgrade || match.status === "missing" || match.status === "unverifiable") return match;
+  const status = match.status === "satisfied" ? downgrade : downgrade === "missing" ? "missing" : match.status;
+  if (status === match.status) return match;
+  return {
+    ...match,
+    status,
+    missingEvidence: [...new Set([...match.missingEvidence, `README declares requirement as ${downgrade}`])].sort().slice(0, 3)
+  };
 }
 
 export function normalizeMatches(matches: RequirementMatch[]): RequirementMatch[] {
