@@ -169,10 +169,10 @@ describe("requirements matching", () => {
       "4. Validate configuration",
       "5. Render reports",
       "## Current Status",
-      "Done: 1, REQ-ACCOUNT-2",
-      "Partial / shallow: 3, REQ-ACCOUNT-2",
-      "Incomplete: 4",
-      "Missing depth: 5"
+      "- Done: 1, REQ-ACCOUNT-2",
+      "- Partial / shallow: 3, REQ-ACCOUNT-2",
+      "- Incomplete: 4",
+      "- Missing depth: 5"
     ].join("\n"));
 
     expect(requirements).toEqual([

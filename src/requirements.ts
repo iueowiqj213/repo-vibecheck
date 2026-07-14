@@ -48,8 +48,9 @@ function normalizeRequirementReference(reference: string): string {
 }
 
 function parseNegativeStatusDeclaration(rawLine: string): { downgrade: DeclaredDowngrade; references: string[] } | undefined {
+  const statusLine = rawLine.replace(/^\s*[-*+]\s+/, "");
   for (const declaration of NEGATIVE_STATUS_DECLARATIONS) {
-    const match = rawLine.match(declaration.pattern);
+    const match = statusLine.match(declaration.pattern);
     const referenceList = match?.[1];
     if (!referenceList) continue;
     const references = referenceList.split(",").map((reference) => normalizeRequirementReference(reference.trim()));
