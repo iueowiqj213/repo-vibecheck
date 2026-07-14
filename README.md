@@ -112,12 +112,33 @@ These flags may execute arbitrary code from the target repository. Repo Vibechec
 
 ## Understanding requirement results
 
-- `satisfied`: the rule's required evidence groups were found.
+Each requirement is reported with a stable ID, status, source line, evidence, and missing evidence when the result is not satisfied:
+
+- `satisfied`: the required evidence groups were found.
 - `partially_satisfied`: meaningful evidence exists, but implementation evidence is incomplete.
 - `missing`: the requirement is recognized and no meaningful evidence was found.
-- `unverifiable`: the claim is outside the MVP's supported evidence catalog.
+- `unverifiable`: the claim is outside the supported evidence catalog.
+
+The scanner extracts explicit requirement checklists from the README alongside any external requirements file. Recognized section headings (case-insensitive) are `Requirements`, `Requirement Checklist`, `Acceptance Criteria`, and `Feature Requirements`. Extraction stops at the next heading of the same or higher level, so ordinary lists, examples, status summaries, and honest-gap sections are not treated as requirements. Explicit IDs such as `REQ-12` are preserved; numbered items without IDs become `README-1`, `README-2`, and so on.
+
+README self-assessment can only lower confidence. If a status summary explicitly links a requirement ID or number to terms like `partial`, `shallow`, `incomplete`, `missing depth`, or `not implemented`, the result is downgraded. A `done` label never upgrades a requirement and never replaces code evidence.
+
+Requirements that do not match an existing concept rule fall back to a deterministic lexical heuristic. The fallback searches source files for related symbols, commands, persisted fields, and focused tests, but ignores generated folders, dependency directories, comments, and the README text itself. One implementation signal without depth is reported as partially satisfied; no signal for a concrete claim is reported as missing; abstract claims are unverifiable. The heuristic is offline and deterministic, not a semantic or AI evaluation, so it can still miss nuanced quality.
 
 A dependency alone normally does not prove a feature. For example, the `stripe` package without server-side checkout/payment usage is reported as partial.
+
+### Score and coverage
+
+The requirements category contributes up to 50 points. Requirement points are distributed evenly across extracted items:
+
+- `satisfied`: full item credit
+- `partially_satisfied`: half item credit
+- `missing`: zero credit
+- `unverifiable`: zero credit and explicitly uncovered
+
+Requirement coverage is the share of requirement weight that is satisfied, partially satisfied, or missing. Unverifiable requirements reduce coverage instead of disappearing. Overall `scoreCoverage` combines executed categories, but the requirements category now contributes its measured requirement coverage rather than being counted as fully covered after a single recognized claim.
+
+Score measures how much weighted evidence was found. Coverage measures how much of the weighted audit surface could be evaluated. A high score with low coverage means the evaluated portion performed well, but much of the repository remains unverified.
 
 ## Example
 
