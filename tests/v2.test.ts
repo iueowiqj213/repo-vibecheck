@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,6 +32,29 @@ describe("v0.2 policy integrations", () => {
     const baseline = createBaseline([finding], []);
     const compared = compareBaseline([finding, { ...finding, id: "new", message: "new" }], [], baseline);
     expect(compared.summary).toEqual({ new: 1, unchanged: 1, resolved: 0 });
+  });
+
+  it("keeps explicit requirement baseline identities distinct by ID and source line", () => {
+    const baseline = createBaseline([], [{ claim: "User authentication", concept: "authentication", status: "missing", evidence: [], missingEvidence: [], requirementId: "REQ-AUTH-1", sourceLine: 3 }]);
+    const compared = compareBaseline([], [
+      { claim: "User authentication", concept: "authentication", status: "missing", evidence: [], missingEvidence: [], requirementId: "REQ-AUTH-1", sourceLine: 4 },
+      { claim: "User authentication", concept: "authentication", status: "missing", evidence: [], missingEvidence: [], requirementId: "REQ-AUTH-2", sourceLine: 3 }
+    ], baseline);
+
+    expect(compared.summary).toEqual({ new: 2, unchanged: 0, resolved: 1 });
+  });
+
+  it("matches one identified requirement against a legacy concept baseline", () => {
+    const legacyFingerprint = createHash("sha256")
+      .update(["requirement", "authentication", "missing"].join("\0"))
+      .digest("hex")
+      .slice(0, 24);
+    const match = { claim: "User authentication", concept: "authentication", status: "missing" as const, evidence: [], missingEvidence: [], requirementId: "REQ-AUTH-1", sourceLine: 3 };
+
+    const compared = compareBaseline([], [match], { schemaVersion: 1, fingerprints: [legacyFingerprint] });
+
+    expect(match.baselineState).toBe("unchanged");
+    expect(compared.summary).toEqual({ new: 0, unchanged: 1, resolved: 0 });
   });
 
   it("redacts tokens and user home paths", () => {
