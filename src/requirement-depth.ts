@@ -1,4 +1,5 @@
 import type { RequirementStatus } from "./types.js";
+import { analyzeShallowBody } from "./shallow-depth.js";
 
 export interface RequirementDepthContext {
   implementationSources: ReadonlyMap<string, string>;
@@ -77,8 +78,19 @@ export function evaluateRequirementDepth(claim: string, context: RequirementDept
   const testSignals = context.testSources ? collectSignals(context.testSources, claimTokenSet, "test") : [];
   const hasImplementation = implementationSignals.length > 0;
   const satisfied = hasImplementation && (implementationSignals.length > 1 || testSignals.length > 0);
-  const status: RequirementStatus = satisfied ? "satisfied" : hasImplementation ? "partially_satisfied" : "missing";
-  const missingEvidence = status === "satisfied"
+  const shallowAnalyses = satisfied
+    ? implementationSignals.map((signal) => {
+      const source = context.implementationSources.get(signal.file);
+      return source === undefined ? { shallow: false } : analyzeShallowBody(signal.file, source, signal.line);
+    })
+    : [];
+  const shallowReason = shallowAnalyses.length > 0 && shallowAnalyses.every((analysis) => analysis.shallow)
+    ? shallowAnalyses[0]?.reason
+    : undefined;
+  const status: RequirementStatus = shallowReason ? "partially_satisfied" : satisfied ? "satisfied" : hasImplementation ? "partially_satisfied" : "missing";
+  const missingEvidence = shallowReason
+    ? [shallowReason]
+    : status === "satisfied"
     ? []
     : stableBound([
       ...(!hasImplementation ? ["matching implementation function or command branch"] : []),
@@ -112,11 +124,15 @@ function isEligibleSource(file: string, kind: Signal["kind"]): boolean {
 
 function stripComments(source: string): string {
   return source
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, preserveLineBreaks)
+    .replace(/<!--[\s\S]*?-->/g, preserveLineBreaks)
     .replace(/^\s*#.*$/gm, "")
     .replace(/#.*$/gm, "")
     .replace(/\/\/.*$/gm, "");
+}
+
+function preserveLineBreaks(value: string): string {
+  return value.replace(/[^\r\n]/g, "");
 }
 
 function hasMatchingTokens(line: string, claimTokens: ReadonlySet<string>, kind: Signal["kind"]): boolean {
