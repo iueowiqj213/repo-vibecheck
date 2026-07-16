@@ -125,6 +125,8 @@ README self-assessment can only lower confidence. If a status summary explicitly
 
 Requirements that do not match an existing concept rule fall back to a deterministic lexical heuristic. The fallback searches source files for related symbols, commands, persisted fields, and focused tests, but ignores generated folders, dependency directories, comments, and the README text itself. One implementation signal without depth is reported as partially satisfied; no signal for a concrete claim is reported as missing; abstract claims are unverifiable. The heuristic is offline and deterministic, not a semantic or AI evaluation, so it can still miss nuanced quality.
 
+For Python and JavaScript/TypeScript fallback requirements, Repo Vibecheck also inspects the already-matched function body. Empty functions, Python `pass`, and functions that only return an input unchanged are treated as shallow and can downgrade `satisfied` to `partially_satisfied`. A mutation, branch, transformation, validation step, delegated function call, or any other substantive matching implementation prevents the downgrade. Ambiguous syntax is treated as substantive to avoid false penalties.
+
 A dependency alone normally does not prove a feature. For example, the `stripe` package without server-side checkout/payment usage is reported as partial.
 
 ### Score and coverage
