@@ -26,4 +26,10 @@ describe("release contracts", () => {
       "./types": { types: "./dist/types.d.ts", import: "./dist/types.js" }
     });
   });
+
+  it("keeps the CLI version aligned with package metadata", async () => {
+    const manifest = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
+    const cli = await readFile("src/cli.ts", "utf8");
+    expect(cli).toContain(`.version("${manifest.version}")`);
+  });
 });
