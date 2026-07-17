@@ -4,9 +4,9 @@ import { commandsForProject } from "../src/runner.js";
 describe("commandsForProject", () => {
   it("only returns finite opted-in scripts", () => {
     expect(commandsForProject("pnpm", { dev: "vite", build: "vite build", test: "vitest" }, true, true, ["Node.js"])).toEqual([
-      { command: "pnpm", args: ["install"] },
-      { command: "pnpm", args: ["run", "build"] },
-      { command: "pnpm", args: ["test"] }
+      { label: "install", command: "pnpm", args: ["install"] },
+      { label: "build-test", command: "pnpm", args: ["run", "build"] },
+      { label: "build-test", command: "pnpm", args: ["test"] }
     ]);
   });
 
@@ -20,8 +20,8 @@ describe("commandsForProject", () => {
 
   it("keeps Node selection unchanged and appends Python discovery in mixed projects", () => {
     expect(commandsForProject("npm", { build: "tsc", test: "vitest" }, false, true, ["Node.js", "Python"])).toEqual([
-      { command: "npm", args: ["run", "build"] },
-      { command: "npm", args: ["test"] },
+      { label: "build-test", command: "npm", args: ["run", "build"] },
+      { label: "build-test", command: "npm", args: ["test"] },
       { label: "python-test", command: "python", args: ["-m", "unittest", "discover", "-v"], shell: false }
     ]);
   });
