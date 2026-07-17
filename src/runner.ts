@@ -19,7 +19,7 @@ export async function runCommand(spec: CommandSpec, cwd: string, timeoutMs = 120
   const started = Date.now();
   return new Promise((resolve) => {
     const env: NodeJS.ProcessEnv = { CI: "true" };
-    for (const key of ["PATH", "Path", "SystemRoot", "HOME", "USERPROFILE", "TEMP", "TMP", ...passEnv]) if (process.env[key] !== undefined) env[key] = process.env[key];
+    for (const key of ["PATH", "Path", "SystemRoot", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP", ...passEnv]) if (process.env[key] !== undefined) env[key] = process.env[key];
     const child = spawn(spec.command, spec.args, { cwd, shell: spec.shell ?? process.platform === "win32", detached: process.platform !== "win32", env });
     let stdout = "", stderr = "", timedOut = false;
     const timer = setTimeout(() => { timedOut = true; killTree(child.pid); }, timeoutMs);

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,7 +38,8 @@ describe("scanRepository", () => {
       message: "python -m unittest discover -v passed"
     }));
     expect(report.categoryScores.baseline.status).toBe("scored");
-  });
+    if (process.platform === "win32") await expect(access(join(root, "Python"))).rejects.toThrow();
+  }, 15_000);
 
   it("does not confuse test output with the unittest zero-test summary", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-python-output-"));
@@ -58,7 +59,7 @@ describe("scanRepository", () => {
       severity: "info",
       message: "python -m unittest discover -v passed"
     }));
-  });
+  }, 15_000);
 
   it("turns failed Python unittest discovery into a baseline error", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-python-fail-"));
@@ -78,7 +79,7 @@ describe("scanRepository", () => {
       severity: "error",
       message: "python -m unittest discover -v failed"
     }));
-  });
+  }, 15_000);
 
   it("turns zero discovered Python tests into a baseline error", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-python-zero-"));
@@ -93,7 +94,7 @@ describe("scanRepository", () => {
       message: "python -m unittest discover -v failed",
       evidence: expect.arrayContaining(["no tests discovered"])
     }));
-  });
+  }, 15_000);
 
   it("does not run Python tests without explicit opt-in", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-python-static-"));
@@ -121,7 +122,7 @@ describe("scanRepository", () => {
 
     expect(report.checksExecuted).toEqual(["static", "build-test", "python-test"]);
     expect(report.findings.filter((finding) => finding.id === "baseline.command" && finding.severity === "info")).toHaveLength(2);
-  });
+  }, 15_000);
 
   it("composes project, requirement, env, script, and placeholder checks", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-"));
