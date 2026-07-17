@@ -71,9 +71,10 @@ export async function scanRepository(target: string, options: ScanOptions = {}):
   const specs = commandsForProject(detected.packageManager, manifest.scripts ?? {}, options.runInstall ?? false, options.runScripts ?? false, detected.projectTypes);
   const executedChecks: string[] = [];
   for (const spec of specs) {
-    const result = await runCommand(spec, root, 120_000, options.passEnv ?? (options.configPath ? loadedConfig.config.execution.passEnv : []));
+    const result = await runCommand(spec, root, 120_000, options.passEnv ?? loadedConfig.config.execution.passEnv);
     if (spec.label) executedChecks.push(spec.label);
-    const noTests = spec.label === "python-test" && /^Ran 0 tests in [^\r\n]+$/m.test(`${result.stdout}\n${result.stderr}`);
+    const unittestSummaries = result.stderr.match(/^Ran \d+ tests? in [^\r\n]+$/gm) ?? [];
+    const noTests = spec.label === "python-test" && /^Ran 0 tests? /.test(unittestSummaries.at(-1) ?? "");
     const passed = result.exitCode === 0 && !result.timedOut && !noTests;
     findings.push({ id: "baseline.command", category: "baseline", severity: passed ? "info" : "error", message: `${spec.command} ${spec.args.join(" ")} ${passed ? "passed" : "failed"}`, evidence: [`exit=${result.exitCode}`, `duration=${result.durationMs}ms`, ...(result.timedOut ? ["timed out"] : []), ...(noTests ? ["no tests discovered"] : [])] });
   }
@@ -92,7 +93,7 @@ export async function scanRepository(target: string, options: ScanOptions = {}):
     schemaVersion: "2.0", product: "repo-vibecheck", targetPath: root, generatedAt: new Date().toISOString(),
     ...scored,
     project: { packageManager: detected.packageManager, lockfiles: detected.lockfiles, projectTypes: detected.projectTypes, scripts: detected.scripts, profile },
-    checksExecuted: ["static", ...(options.online === false ? [] : ["registry"]), ...(options.runInstall ? ["install"] : []), ...(options.runScripts ? ["build-test"] : []), ...executedChecks],
+    checksExecuted: [...new Set(["static", ...(online ? ["registry"] : []), ...executedChecks])],
     requirementMatches, findings, summary, ...(loadedConfig.path ? { configPath: loadedConfig.path } : {}), ...(baselineSummary ? { baseline: baselineSummary } : {})
   };
 }

@@ -19,6 +19,34 @@ describe("scanRepository", () => {
     expect(report.project.profile).toBe("cli");
   });
 
+  it("applies passEnv and offline mode from an auto-discovered config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-auto-config-"));
+    const key = "VIBECHECK_AUTO_CONFIG_VALUE";
+    process.env[key] = "available";
+    await writeFile(join(root, "repo-vibecheck.yaml"), `offline: true\nexecution:\n  passEnv:\n    - ${key}\n`);
+    await writeFile(join(root, "test_env.py"), [
+      "import os",
+      "import unittest",
+      "",
+      "class EnvironmentTest(unittest.TestCase):",
+      "    def test_configured_environment(self):",
+      `        self.assertEqual(os.environ.get('${key}'), 'available')`
+    ].join("\n"));
+
+    try {
+      const report = await scanRepository(root, { runScripts: true });
+
+      expect(report.checksExecuted).toEqual(["static", "python-test"]);
+      expect(report.findings).toContainEqual(expect.objectContaining({
+        id: "baseline.command",
+        severity: "info",
+        message: "python -m unittest discover -v passed"
+      }));
+    } finally {
+      delete process.env[key];
+    }
+  }, 15_000);
+
   it("runs opted-in Python unittest discovery and records the attempted check", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-python-pass-"));
     await writeFile(join(root, "test_math.py"), [
@@ -39,6 +67,7 @@ describe("scanRepository", () => {
     }));
     expect(report.categoryScores.baseline.status).toBe("scored");
     if (process.platform === "win32") await expect(access(join(root, "Python"))).rejects.toThrow();
+    await expect(access(join(root, "__pycache__"))).rejects.toThrow();
   }, 15_000);
 
   it("does not confuse test output with the unittest zero-test summary", async () => {
@@ -48,12 +77,13 @@ describe("scanRepository", () => {
       "",
       "class OutputTest(unittest.TestCase):",
       "    def test_output(self):",
-      "        print('Ran 0 tests')",
+      "        print('Ran 0 tests in 0.000s')",
       "        self.assertTrue(True)"
     ].join("\n"));
 
     const report = await scanRepository(root, { online: false, runScripts: true });
 
+    expect(report.checksExecuted).toEqual(["static", "python-test"]);
     expect(report.findings).toContainEqual(expect.objectContaining({
       id: "baseline.command",
       severity: "info",
