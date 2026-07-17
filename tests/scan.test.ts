@@ -19,6 +19,110 @@ describe("scanRepository", () => {
     expect(report.project.profile).toBe("cli");
   });
 
+  it("runs opted-in Python unittest discovery and records the attempted check", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-python-pass-"));
+    await writeFile(join(root, "test_math.py"), [
+      "import unittest",
+      "",
+      "class MathTest(unittest.TestCase):",
+      "    def test_addition(self):",
+      "        self.assertEqual(1 + 1, 2)"
+    ].join("\n"));
+
+    const report = await scanRepository(root, { online: false, runScripts: true });
+
+    expect(report.checksExecuted).toContain("python-test");
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      id: "baseline.command",
+      severity: "info",
+      message: "python -m unittest discover -v passed"
+    }));
+    expect(report.categoryScores.baseline.status).toBe("scored");
+  });
+
+  it("does not confuse test output with the unittest zero-test summary", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-python-output-"));
+    await writeFile(join(root, "test_output.py"), [
+      "import unittest",
+      "",
+      "class OutputTest(unittest.TestCase):",
+      "    def test_output(self):",
+      "        print('Ran 0 tests')",
+      "        self.assertTrue(True)"
+    ].join("\n"));
+
+    const report = await scanRepository(root, { online: false, runScripts: true });
+
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      id: "baseline.command",
+      severity: "info",
+      message: "python -m unittest discover -v passed"
+    }));
+  });
+
+  it("turns failed Python unittest discovery into a baseline error", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-python-fail-"));
+    await writeFile(join(root, "test_failure.py"), [
+      "import unittest",
+      "",
+      "class FailureTest(unittest.TestCase):",
+      "    def test_failure(self):",
+      "        self.fail('expected failure')"
+    ].join("\n"));
+
+    const report = await scanRepository(root, { online: false, runScripts: true });
+
+    expect(report.checksExecuted).toContain("python-test");
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      id: "baseline.command",
+      severity: "error",
+      message: "python -m unittest discover -v failed"
+    }));
+  });
+
+  it("turns zero discovered Python tests into a baseline error", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-python-zero-"));
+    await writeFile(join(root, "app.py"), "def value():\n    return 1\n");
+
+    const report = await scanRepository(root, { online: false, runScripts: true });
+
+    expect(report.checksExecuted).toContain("python-test");
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      id: "baseline.command",
+      severity: "error",
+      message: "python -m unittest discover -v failed",
+      evidence: expect.arrayContaining(["no tests discovered"])
+    }));
+  });
+
+  it("does not run Python tests without explicit opt-in", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-python-static-"));
+    await writeFile(join(root, "test_static.py"), "import unittest\n");
+
+    const report = await scanRepository(root, { online: false });
+
+    expect(report.checksExecuted).toEqual(["static"]);
+    expect(report.findings.some((finding) => finding.id === "baseline.command")).toBe(false);
+    expect(report.categoryScores.baseline.status).toBe("not_run");
+  });
+
+  it("preserves Node execution and adds Python discovery for mixed projects", async () => {
+    const root = await mkdtemp(join(tmpdir(), "vibecheck-mixed-tests-"));
+    await writeFile(join(root, "package.json"), JSON.stringify({ packageManager: "npm", scripts: { test: "node -e \"process.exit(0)\"" } }));
+    await writeFile(join(root, "test_python.py"), [
+      "import unittest",
+      "",
+      "class PythonTest(unittest.TestCase):",
+      "    def test_passes(self):",
+      "        self.assertTrue(True)"
+    ].join("\n"));
+
+    const report = await scanRepository(root, { online: false, runScripts: true });
+
+    expect(report.checksExecuted).toEqual(["static", "build-test", "python-test"]);
+    expect(report.findings.filter((finding) => finding.id === "baseline.command" && finding.severity === "info")).toHaveLength(2);
+  });
+
   it("composes project, requirement, env, script, and placeholder checks", async () => {
     const root = await mkdtemp(join(tmpdir(), "vibecheck-"));
     await mkdir(join(root, "src"));
