@@ -110,6 +110,8 @@ repo-vibecheck scan ./my-project --run-install --run-scripts
 
 These flags may execute arbitrary code from the target repository. Repo Vibecheck runs only install plus existing `build` and `test` scripts; it never starts `dev` or `start`.
 
+For detected Python repositories, `--run-scripts` also runs the fixed command `python -m unittest discover -v`. Repo Vibecheck does not create a virtual environment, install Python packages, or invoke pytest. A non-zero exit, timeout, spawn failure, or unittest result with zero discovered tests is reported as a failed baseline check. Python execution uses the same sanitized environment, output cap, timeout, and process-tree cleanup as Node commands.
+
 ## Understanding requirement results
 
 Each requirement is reported with a stable ID, status, source line, evidence, and missing evidence when the result is not satisfied:
