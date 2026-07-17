@@ -28,6 +28,15 @@ describe("reporters", () => {
     expect(renderHuman(report)).toContain("Requirements: 30/50");
   });
 
+  it("shows executed checks when checks ran", () => {
+    expect(renderHuman({ ...report, checksExecuted: ["python-test", "static"] }))
+      .toContain("Executed checks: python-test, static");
+  });
+
+  it("omits executed checks when no checks ran", () => {
+    expect(renderHuman({ ...report, checksExecuted: [] })).not.toContain("Executed checks:");
+  });
+
   it("shows requirement metadata, depth gaps, coverage, and requirement warnings", () => {
     const human = renderHuman({
       ...report,
