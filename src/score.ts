@@ -16,11 +16,12 @@ export function scoreReport(matches: RequirementMatch[], findings: Finding[], ba
   const requirementRatio = matches.length === 0 ? 0 : matches.reduce((sum, match) => sum + requirementCredit[match.status], 0) / matches.length;
   const requirementCoverage = percentage(matches.filter((match) => match.status !== "unverifiable").length, matches.length);
   const penalty = (categories: Finding["category"][]) => findings.filter((finding) => categories.includes(finding.category)).reduce((sum, finding) => sum + (finding.severity === "error" ? 5 : finding.severity === "warning" ? 2 : 0), 0);
+  const baselineFailure = findings.some((finding) => finding.severity === "error" && (finding.category === "baseline" || finding.category === "project"));
   const baselineApplicable = profile !== "template";
   const consistencyApplicable = profile === "app";
   const categoryScores: ScanReport["categoryScores"] = {
     requirements: matches.length === 0 ? { status: "not_applicable", score: null, maxScore: 50 } : { status: "scored", score: Math.round(50 * requirementRatio), maxScore: 50, coverage: requirementCoverage },
-    baseline: !baselineApplicable ? { status: "not_applicable", score: null, maxScore: 25 } : baselineExecuted ? { status: "scored", score: Math.max(0, 25 - penalty(["baseline", "project"])), maxScore: 25 } : { status: "not_run", score: null, maxScore: 25 },
+    baseline: !baselineApplicable ? { status: "not_applicable", score: null, maxScore: 25 } : baselineExecuted ? { status: "scored", score: baselineFailure ? 0 : Math.max(0, 25 - penalty(["baseline", "project"])), maxScore: 25 } : { status: "not_run", score: null, maxScore: 25 },
     consistency: !consistencyApplicable ? { status: "not_applicable", score: null, maxScore: 15 } : { status: "scored", score: Math.max(0, 15 - penalty(["env", "placeholders", "claims"])), maxScore: 15 },
     hygiene: { status: "scored", score: Math.max(0, 10 - penalty(["dependencies"])), maxScore: 10 }
   };
