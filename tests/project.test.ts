@@ -32,4 +32,13 @@ describe("detectProject", () => {
     const result = detectProject(["app.py"], {});
     expect(result.projectTypes).toEqual(["Python"]);
   });
+
+  it("does not detect Python from documentation or fixture files alone", () => {
+    const result = detectProject(
+      ["package.json", "tests/fixtures/python/test_example.py", "examples/demo.py"],
+      { scripts: { test: "vitest" } }
+    );
+
+    expect(result.projectTypes).toEqual(["Node.js"]);
+  });
 });

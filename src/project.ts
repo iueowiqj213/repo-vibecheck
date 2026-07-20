@@ -4,6 +4,7 @@ const LOCKFILES = new Map([
   ["package-lock.json", "npm"], ["npm-shrinkwrap.json", "npm"],
   ["pnpm-lock.yaml", "pnpm"], ["yarn.lock", "yarn"], ["bun.lock", "bun"], ["bun.lockb", "bun"]
 ] as const);
+const NON_PROJECT_PYTHON = /(?:^|\/)(?:docs?|documentation|examples?|fixtures?)(?:\/|$)/i;
 
 export function detectProject(files: string[], manifest: PackageManifest): ProjectInfo & { findings: Finding[] } {
   const lockfiles = files.filter((file) => LOCKFILES.has(file as never));
@@ -21,7 +22,7 @@ export function detectProject(files: string[], manifest: PackageManifest): Proje
   const deps = { ...manifest.dependencies, ...manifest.devDependencies, ...manifest.peerDependencies };
   const projectTypes: string[] = [];
   if (files.includes("package.json") || Object.keys(deps).length > 0 || manifest.scripts) projectTypes.push("Node.js");
-  if (files.some((file) => file.endsWith(".py")) || files.includes("pyproject.toml") || files.includes("requirements.txt")) projectTypes.push("Python");
+  if (files.some((file) => file.endsWith(".py") && !NON_PROJECT_PYTHON.test(file)) || files.includes("pyproject.toml") || files.includes("requirements.txt")) projectTypes.push("Python");
   if (files.includes("tsconfig.json") || deps.typescript) projectTypes.push("TypeScript");
   if (deps.next) projectTypes.push("Next.js");
   if (deps.vite || files.some((file) => /^vite\.config\./.test(file))) projectTypes.push("Vite");

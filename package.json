@@ -1,6 +1,6 @@
 {
   "name": "repo-vibecheck",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Verify that your AI-generated repo actually works and matches what was requested.",
   "type": "module",
   "bin": {
@@ -76,7 +76,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "tsx": "^4.20.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.8.0",
     "vitest": "^3.2.4"
   }

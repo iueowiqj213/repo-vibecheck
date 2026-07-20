@@ -1,4 +1,13 @@
-from app import add_task, list_task_records, mark_task_done, persist_task_records
+from app import (
+    add_task,
+    delete_task,
+    edit_task,
+    filter_open_task_records,
+    list_task_records,
+    mark_task_done,
+    persist_task_records,
+    prioritize_task_records,
+)
 
 
 def test_add_task():
@@ -16,3 +25,23 @@ def test_mark_task_done():
 def test_persist_task_records(tmp_path):
     path = tmp_path / "tasks.json"
     assert persist_task_records([], path) == []
+
+
+def test_delete_task():
+    task = {"title": "write fixture"}
+    assert delete_task(task) == task
+
+
+def test_edit_task():
+    task = {"title": "write fixture"}
+    assert edit_task(task) == task
+
+
+def test_prioritize_task_records():
+    tasks = [{"title": "write fixture"}]
+    assert prioritize_task_records(tasks) == tasks
+
+
+def test_filter_open_task_records():
+    tasks = [{"title": "write fixture", "done": False}]
+    assert filter_open_task_records(tasks) == tasks

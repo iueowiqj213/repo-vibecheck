@@ -22,7 +22,7 @@ export function createProgram(scanner: Scanner = scanRepository, write: (value: 
     if (error.exitCode === 0) throw error;
     throw new CommanderError(2, error.code, error.message);
   });
-  program.name("repo-vibecheck").description("Verify that an AI-generated repo works and matches what was requested.").version("0.2.0");
+  program.name("repo-vibecheck").description("Verify that an AI-generated repo works and matches what was requested.").version("0.4.0");
   program.command("scan")
     .description("Audit a repository")
     .argument("[path]", "repository path", ".")
@@ -43,7 +43,8 @@ export function createProgram(scanner: Scanner = scanRepository, write: (value: 
     .option("--run-scripts", "run finite build and test scripts")
     .option("--fail-on <level>", "exit 1 for findings at this level: never, error, warning", parseFailLevel)
     .action(async (target: string, flags: CliOptions) => {
-      if ((flags.runInstall || flags.runScripts) && !flags.json) write("Warning: executing repository code because an explicit --run-* flag was supplied.\n\n");
+      const format = flags.json ? "json" : flags.format ?? "human";
+      if ((flags.runInstall || flags.runScripts) && format === "human") write("Warning: executing repository code because an explicit --run-* flag was supplied.\n\n");
       const loadedConfig = await loadConfig(resolve(target), flags.config);
       const options: ScanOptions = {
         ...(flags.offline ? { online: false } : {}),
@@ -57,7 +58,6 @@ export function createProgram(scanner: Scanner = scanRepository, write: (value: 
         ,...(flags.passEnv ? { passEnv: flags.passEnv } : {})
       };
       const report = (flags.redact ?? loadedConfig.config.redact) ? redactReport(await scanner(target, options)) : await scanner(target, options);
-      const format = flags.json ? "json" : flags.format ?? "human";
       const rendered = format === "sarif" ? renderSarif(report) : format === "json" ? renderJson(report) : renderHuman(report);
       if (flags.output) await atomicWrite(flags.output, `${rendered}\n`); else write(`${rendered}\n`);
       if (flags.writeBaseline) await atomicWrite(flags.writeBaseline, `${JSON.stringify(createBaseline(report.findings, report.requirementMatches), null, 2)}\n`);

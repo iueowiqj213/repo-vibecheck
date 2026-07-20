@@ -10,7 +10,8 @@ export function renderHuman(report: ScanReport): string {
     `  Baseline: ${formatScore(report.categoryScores.baseline)}`,
     `  Consistency: ${formatScore(report.categoryScores.consistency)}`,
     `  Hygiene: ${formatScore(report.categoryScores.hygiene)}`,
-    `Project: ${report.project.projectTypes.join(", ")}`, `Package manager: ${report.project.packageManager}`, ""
+    `Project: ${report.project.projectTypes.join(", ")}`, `Package manager: ${report.project.packageManager}`,
+    ...(report.checksExecuted.length ? [`Executed checks: ${report.checksExecuted.join(", ")}`] : []), ""
   ];
   if (report.requirementMatches.length) {
     lines.push("Requirements Match", ...report.requirementMatches.flatMap(formatMatch), "");
