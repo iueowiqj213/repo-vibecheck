@@ -68,10 +68,15 @@ export async function scanRepository(target: string, options: ScanOptions = {}):
   const hasPaymentEvidence = requirementMatches.some((match) => match.concept === "payment" && match.evidence.length > 0);
   const hasWebhookEvidence = [...implementationSources].some(([file, source]) => /webhook/i.test(file) || /webhooks\.constructEvent/i.test(source));
   if (hasPaymentEvidence && !hasWebhookEvidence) findings.push({ id: "claims.payment-webhook-missing", category: "claims", severity: "warning", message: "Payment evidence found, but no webhook handler evidence was detected", evidence: [], remediation: "Add and document a verified server-side payment webhook handler if the flow requires one." });
-  const specs = commandsForProject(detected.packageManager, manifest.scripts ?? {}, options.runInstall ?? false, options.runScripts ?? false);
+  const specs = commandsForProject(detected.packageManager, manifest.scripts ?? {}, options.runInstall ?? false, options.runScripts ?? false, detected.projectTypes);
+  const executedChecks: string[] = [];
   for (const spec of specs) {
-    const result = await runCommand(spec, root, 120_000, options.passEnv ?? (options.configPath ? loadedConfig.config.execution.passEnv : []));
-    findings.push({ id: "baseline.command", category: "baseline", severity: result.exitCode === 0 && !result.timedOut ? "info" : "error", message: `${spec.command} ${spec.args.join(" ")} ${result.exitCode === 0 ? "passed" : "failed"}`, evidence: [`exit=${result.exitCode}`, `duration=${result.durationMs}ms`, ...(result.timedOut ? ["timed out"] : [])] });
+    const result = await runCommand(spec, root, 120_000, options.passEnv ?? loadedConfig.config.execution.passEnv);
+    if (spec.label) executedChecks.push(spec.label);
+    const unittestSummaries = result.stderr.match(/^Ran \d+ tests? in [^\r\n]+$/gm) ?? [];
+    const noTests = spec.label === "python-test" && /^Ran 0 tests? /.test(unittestSummaries.at(-1) ?? "");
+    const passed = result.exitCode === 0 && !result.timedOut && !noTests;
+    findings.push({ id: "baseline.command", category: "baseline", severity: passed ? "info" : "error", message: `${spec.command} ${spec.args.join(" ")} ${passed ? "passed" : "failed"}`, evidence: [`exit=${result.exitCode}`, `duration=${result.durationMs}ms`, ...(result.timedOut ? ["timed out"] : []), ...(noTests ? ["no tests discovered"] : [])] });
   }
   const online = options.online ?? !loadedConfig.config.offline;
   if (online) findings.push(...await checkRegistryDependencies({ ...manifest.dependencies, ...manifest.devDependencies }));
@@ -88,7 +93,7 @@ export async function scanRepository(target: string, options: ScanOptions = {}):
     schemaVersion: "2.0", product: "repo-vibecheck", targetPath: root, generatedAt: new Date().toISOString(),
     ...scored,
     project: { packageManager: detected.packageManager, lockfiles: detected.lockfiles, projectTypes: detected.projectTypes, scripts: detected.scripts, profile },
-    checksExecuted: ["static", ...(options.online === false ? [] : ["registry"]), ...(options.runInstall ? ["install"] : []), ...(options.runScripts ? ["build-test"] : [])],
+    checksExecuted: [...new Set(["static", ...(online ? ["registry"] : []), ...executedChecks])],
     requirementMatches, findings, summary, ...(loadedConfig.path ? { configPath: loadedConfig.path } : {}), ...(baselineSummary ? { baseline: baselineSummary } : {})
   };
 }

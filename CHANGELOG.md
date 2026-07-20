@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Execute Python standard-library unittest discovery under the existing `--run-scripts` opt-in.
+- Treat failing, timed-out, spawn-failed, and zero-test execution as baseline errors.
+- Score an executed baseline with any error as `0/25`.
+- Show attempted execution checks in human reports.
+
 ## 0.3.0
 
 - Detect empty, `pass`, and identity-return Python and JavaScript/TypeScript implementations.

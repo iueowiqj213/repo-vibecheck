@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
-const IGNORED = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".turbo", ".sisyphus"]);
+const IGNORED = new Set([".git", "node_modules", "dist", "build", "coverage", ".next", ".turbo", ".sisyphus", "__pycache__"]);
 const TEXT_EXTENSIONS = /\.(?:[cm]?[jt]sx?|py|md|json|ya?ml|toml|env|txt|prisma)$/i;
 const SPECIAL_TEXT = /(?:^|\/)(?:Dockerfile|\.env\.example)$/i;
 
