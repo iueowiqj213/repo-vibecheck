@@ -23,6 +23,18 @@ describe("CLI", () => {
     expect(scan).toHaveBeenCalledWith("fixture", expect.objectContaining({ projectType: "cli" }));
   });
 
+  it("keeps SARIF output machine-readable when execution is enabled", async () => {
+    const report = { product: "repo-vibecheck", findings: [], requirementMatches: [] } as unknown as ScanReport;
+    const scan = vi.fn(async () => report);
+    let output = "";
+
+    await createProgram(scan, (value) => { output += value; }).parseAsync([
+      "node", "repo-vibecheck", "scan", "fixture", "--format", "sarif", "--run-scripts"
+    ]);
+
+    expect(JSON.parse(output).version).toBe("2.1.0");
+  });
+
   it("sets the policy exit code without changing report output", async () => {
     const scan = vi.fn(async () => ({
       product: "repo-vibecheck", findings: [], summary: { error: 1, warning: 0, info: 0 }, requirementMatches: []

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { scoreReport } from "../src/score.js";
-import type { RequirementMatch, RequirementStatus } from "../src/types.js";
+import type { Finding, RequirementMatch, RequirementStatus } from "../src/types.js";
 
 function requirement(status: RequirementStatus): RequirementMatch {
   return {
@@ -9,6 +9,16 @@ function requirement(status: RequirementStatus): RequirementMatch {
     status,
     evidence: [],
     missingEvidence: []
+  };
+}
+
+function finding(category: Finding["category"], severity: Finding["severity"]): Finding {
+  return {
+    id: `${category}-${severity}`,
+    category,
+    severity,
+    message: "A finding",
+    evidence: []
   };
 }
 
@@ -46,6 +56,18 @@ describe("scoreReport", () => {
 
   it("does not award optional baseline execution points when scripts were not run", () => {
     expect(scoreReport([], [], false).categoryScores.baseline).toMatchObject({ status: "not_run", score: null, maxScore: 25 });
+  });
+
+  it.each(["baseline", "project"] as const)("sets the executed baseline score to zero for %s errors", (category) => {
+    expect(scoreReport([], [finding(category, "error")], true).categoryScores.baseline).toMatchObject({ status: "scored", score: 0, maxScore: 25 });
+  });
+
+  it("keeps the warning-only baseline penalty when scripts were run", () => {
+    expect(scoreReport([], [finding("baseline", "warning")], true).categoryScores.baseline.score).toBe(23);
+  });
+
+  it("awards all baseline points for a successful executed baseline", () => {
+    expect(scoreReport([], [], true).categoryScores.baseline.score).toBe(25);
   });
 
   it("marks runtime consistency as inapplicable for libraries and CLIs", () => {
