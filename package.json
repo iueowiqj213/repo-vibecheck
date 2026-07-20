@@ -1,6 +1,6 @@
 {
   "name": "repo-vibecheck",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Verify that your AI-generated repo actually works and matches what was requested.",
   "type": "module",
   "bin": {

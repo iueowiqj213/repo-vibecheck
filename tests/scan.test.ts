@@ -216,7 +216,8 @@ describe("scanRepository", () => {
     const requirements = new Map(report.requirementMatches.map((match) => [match.requirementId ?? "", match]));
 
     expect([...requirements.keys()].filter((id) => id.startsWith("REQ-TASK-"))).toEqual(expectedIds);
-    for (const id of expectedIds.slice(0, 4)) expect(requirements.get(id)?.status).toBe("satisfied");
+    for (const id of ["REQ-TASK-1", "REQ-TASK-3", "REQ-TASK-4"]) expect(requirements.get(id)?.status).toBe("satisfied");
+    expect(requirements.get("REQ-TASK-2")?.status).toBe("partially_satisfied");
     for (const id of expectedIds.slice(4, 8)) expect(requirements.get(id)?.status).toBe("partially_satisfied");
     expect(requirements.get("REQ-TASK-9")?.status).toBe("missing");
     expect(requirements.get("REQ-TASK-9")?.status).not.toBe("satisfied");

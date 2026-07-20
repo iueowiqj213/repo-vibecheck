@@ -22,7 +22,7 @@ export function createProgram(scanner: Scanner = scanRepository, write: (value: 
     if (error.exitCode === 0) throw error;
     throw new CommanderError(2, error.code, error.message);
   });
-  program.name("repo-vibecheck").description("Verify that an AI-generated repo works and matches what was requested.").version("0.2.0");
+  program.name("repo-vibecheck").description("Verify that an AI-generated repo works and matches what was requested.").version("0.3.0");
   program.command("scan")
     .description("Audit a repository")
     .argument("[path]", "repository path", ".")

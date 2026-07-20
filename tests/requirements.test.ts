@@ -222,6 +222,63 @@ describe("requirements matching", () => {
     expect(unverifiable.status).toBe("unverifiable");
   });
 
+  it.each([
+    ["an identity return", "src/tasks.ts", "export function deleteTaskRecords(task) { return task; }", "implementation returns its input unchanged"],
+    ["an empty body", "src/tasks.ts", "export function deleteTaskRecords(task) {}", "implementation body is empty"],
+    ["a Python pass body", "src/tasks.py", "def delete_task_records(task): pass", "implementation body only passes"]
+  ])("downgrades satisfied fallback evidence backed only by %s", (_name, file, source, reason) => {
+    const match = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([[file, source]]),
+      testSources: new Map([["tests/tasks.test.ts", "it('delete task records', () => {});"]])
+    });
+
+    expect(match).toMatchObject({ status: "partially_satisfied", missingEvidence: [reason] });
+  });
+
+  it("keeps satisfied fallback evidence when one matching implementation is substantive", () => {
+    const match = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([
+        ["src/identity.ts", "export function deleteTaskRecords(task) { return task; }"],
+        ["src/implementation.ts", "export function deleteTaskRecords(task) { return removeTask(task); }"]
+      ]),
+      testSources: new Map([["tests/tasks.test.ts", "it('delete task records', () => {});"]])
+    });
+
+    expect(match).toMatchObject({ status: "satisfied", missingEvidence: [] });
+  });
+
+  it("leaves non-satisfied and generic requirement results unchanged", () => {
+    const partial = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([["src/tasks.ts", "export function deleteTaskRecords(task) { return task; }"]])
+    });
+    const missing = evaluateRequirementDepth("Delete task records", { implementationSources: new Map() });
+    const unverifiable = evaluateRequirementDepth("Improve overall quality", { implementationSources: new Map() });
+    const [generic] = evaluateClaims(["Stripe checkout"], {
+      files: ["src/checkout.ts"],
+      dependencies: ["stripe"],
+      sources: new Map([["src/checkout.ts", "export function checkoutPayment(checkout) { return checkout; }\nstripe.checkout.sessions.create({})"]])
+    });
+
+    expect(partial).toMatchObject({ status: "partially_satisfied", missingEvidence: ["focused test or a second implementation signal"] });
+    expect(missing.status).toBe("missing");
+    expect(unverifiable.status).toBe("unverifiable");
+    expect(generic).toMatchObject({ concept: "payment", status: "satisfied", missingEvidence: [] });
+  });
+
+  it("preserves original evidence lines when removing multiline comments", () => {
+    const source = "/*\nleading block\ncomment\n*/\nexport function deleteTaskRecords(task) { return task; }";
+    const match = evaluateRequirementDepth("Delete task records", {
+      implementationSources: new Map([["src/tasks.ts", source]]),
+      testSources: new Map([["tests/tasks.test.ts", "it('delete task records', () => {});"]])
+    });
+
+    expect(match).toMatchObject({
+      status: "partially_satisfied",
+      evidence: expect.arrayContaining(["implementation: src/tasks.ts:5"]),
+      missingEvidence: ["implementation returns its input unchanged"]
+    });
+  });
+
   it("excludes documentation, generated files, dependencies, comments, and test filenames as fallback proof", () => {
     const [match] = evaluateClaims(["Delete task records"], {
       files: ["README.md", "src/generated/tasks.ts", "tests/delete-task-records.test.ts"],
@@ -361,7 +418,7 @@ describe("requirements matching", () => {
 
   it("allows generic add requirements to use entity evidence without matching conflicting actions", () => {
     const darkMode = evaluateRequirementDepth("Add dark mode", {
-      implementationSources: new Map([["src/theme.ts", "export function toggleDarkMode() {}"]]),
+      implementationSources: new Map([["src/theme.ts", "export function toggleDarkMode() { globalThis.darkModeEnabled = !globalThis.darkModeEnabled; }"]]),
       testSources: new Map([["tests/theme.test.ts", "it('toggles dark mode', () => {});"]])
     });
     const wrongAction = evaluateRequirementDepth("Add task records", {
